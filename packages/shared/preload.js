@@ -17,6 +17,8 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("quotaBridge", {
+  // 這個 build 的處理器架構（"arm64" / "x64"）。sandbox preload 也拿得到 process.arch。
+  arch: process.arch,
   getQuotaState: () => ipcRenderer.invoke("quota:state"),
   refreshQuota: () => ipcRenderer.invoke("quota:refresh"),
   minimize: () => ipcRenderer.invoke("window:minimize"),

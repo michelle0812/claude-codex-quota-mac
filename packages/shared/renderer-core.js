@@ -149,8 +149,12 @@ const els = {
   deltaPaceLabel: requiredElement("deltaPaceLabel"),
   deltaPaceText: requiredElement("deltaPaceText"),
   statusDot: requiredElement("statusDot"),
-  statusText: requiredElement("statusText")
+  statusText: requiredElement("statusText"),
+  archBadge: requiredElement("archBadge")
 };
+
+// 大面板右下角標這個 build 是哪個架構。緊湊 HUD 不顯示（footer.status 在緊湊模式本來就 display:none）。
+const ARCH_LABELS = { arm64: "arm", x64: "Intel" };
 
 const copy = {
   zh: {
@@ -1172,6 +1176,8 @@ window.quotaBridge.onCompactScaleChanged((value) => {
 });
 window.quotaBridge.onCompactDisplayModeChanged(renderCompactDisplayMode);
 window.quotaBridge.onSignalSettingsChanged(renderSignalSettings);
+
+setText(els.archBadge, ARCH_LABELS[window.quotaBridge.arch] || window.quotaBridge.arch || "");
 
 renderLoading();
 syncAlwaysOnTop();

@@ -1,6 +1,6 @@
 {
   "name": "claude-quota-mac",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "macOS 專用的 Claude Code 用量小工具，可監看本機或 claude.ai 帳號的 5 小時與 7 天用量與使用節奏。",
   "main": "src/main/main.js",
   "author": "michelle0812 and Claude Usage Widget contributors",
