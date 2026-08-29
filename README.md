@@ -46,8 +46,6 @@
 2. 把 App 拖進 `Applications`。
 3. **第一次開啟請照上面的 Gatekeeper 說明用右鍵打開**，之後就能正常雙擊。
 
-`.zip` 是給需要自動更新流程或自行部署的人用的，一般使用者用 `.dmg` 就好。
-
 ---
 
 ## 功能特色
@@ -244,7 +242,7 @@ npm run test:codex
 ## 建置
 
 ```bash
-npm run build:all          # 產出四個 .dmg + 四個 .zip
+npm run build:all          # 產出四個 .dmg（arm64 / x64 × claude / codex）
 npm run build:claude
 npm run build:codex
 ```
