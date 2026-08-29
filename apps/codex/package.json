@@ -1,6 +1,6 @@
 {
   "name": "codex-quota-mac",
-  "version": "0.2.7",
+  "version": "1.0.0",
   "description": "macOS 專用的 Codex 額度小工具，可監看本機 Codex 用量與使用節奏。",
   "main": "src/main/main.js",
   "author": "michelle0812 and Codex Quota Widget contributors",
@@ -88,5 +88,8 @@
   "devDependencies": {
     "electron": "^31.7.7",
     "electron-builder": "^24.13.3"
+  },
+  "allowScripts": {
+    "electron@31.7.7": true
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "claude-codex-quota-mac",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Claude 額度與 Codex 額度兩個 macOS 桌面小工具的合併 repo。",
   "private": true,
   "license": "MIT",
