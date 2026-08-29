@@ -1,0 +1,31 @@
+{
+  "name": "claude-codex-quota-mac",
+  "version": "0.1.0",
+  "description": "Claude 額度與 Codex 額度兩個 macOS 桌面小工具的合併 repo。",
+  "private": true,
+  "license": "MIT",
+  "author": "michelle0812",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/michelle0812/claude-codex-quota-mac.git"
+  },
+  "homepage": "https://github.com/michelle0812/claude-codex-quota-mac#readme",
+  "bugs": {
+    "url": "https://github.com/michelle0812/claude-codex-quota-mac/issues"
+  },
+  "scripts": {
+    "sync-shared": "node scripts/sync-shared.js",
+    "postinstall": "npm run sync-shared",
+    "install:claude": "npm --prefix apps/claude install",
+    "install:codex": "npm --prefix apps/codex install",
+    "install:all": "npm run install:claude && npm run install:codex",
+    "start:claude": "npm --prefix apps/claude run start",
+    "start:codex": "npm --prefix apps/codex run start",
+    "test:claude": "npm --prefix apps/claude test",
+    "test:codex": "npm --prefix apps/codex test",
+    "test:all": "npm run test:claude && npm run test:codex",
+    "build:claude": "npm --prefix apps/claude run build",
+    "build:codex": "npm --prefix apps/codex run build",
+    "build:all": "npm run build:claude && npm run build:codex"
+  }
+}

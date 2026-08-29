@@ -1,0 +1,244 @@
+/* 兩個 app 共用的設定視窗樣式（來源：packages/shared/settings.css）。 */
+:root {
+  color-scheme: dark;
+  font-family:
+    "Segoe UI",
+    "Microsoft YaHei",
+    system-ui,
+    sans-serif;
+  background: #111418;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  background: #111418;
+}
+
+html {
+  overflow: hidden;
+}
+
+body {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+body {
+  color: #eef7f1;
+}
+
+.settings-shell {
+  display: grid;
+  /* 不寫死列數：帳號區塊是 settings-core.js 依 APP_CONFIG.auth 動態插入的。 */
+  grid-auto-rows: auto;
+  row-gap: 12px;
+  align-content: start;
+  width: 100%;
+  min-height: 100vh;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    linear-gradient(135deg, rgba(24, 28, 34, 0.98), rgba(17, 20, 24, 0.98)),
+    #111418;
+}
+
+header {
+  display: grid;
+  row-gap: 4px;
+}
+
+h1,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 18px;
+  font-weight: 850;
+}
+
+p {
+  min-height: 16px;
+  color: rgba(238, 247, 241, 0.58);
+  font-size: 12px;
+}
+
+.field {
+  display: grid;
+  row-gap: 8px;
+  min-width: 0;
+}
+
+label {
+  color: rgba(238, 247, 241, 0.86);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.control-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 76px;
+  column-gap: 10px;
+  align-items: center;
+}
+
+.toggle-field {
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 14px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.toggle-copy {
+  display: grid;
+  row-gap: 4px;
+  min-width: 0;
+}
+
+.toggle-copy p {
+  line-height: 1.35;
+}
+
+.switch {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+
+.switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.switch-track {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  transition: background 140ms ease;
+}
+
+.switch-track::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #eef7f1;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  transition: transform 140ms ease;
+}
+
+.switch input:checked + .switch-track {
+  background: #65e08d;
+}
+
+.switch input:checked + .switch-track::after {
+  transform: translateX(18px);
+}
+
+.switch input:focus-visible + .switch-track {
+  outline: 2px solid #5aa7ff;
+  outline-offset: 2px;
+}
+
+input[type="range"] {
+  width: 100%;
+  accent-color: #ffd166;
+}
+
+input[type="number"] {
+  width: 76px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 6px;
+  color: #eef7f1;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+}
+
+.hint {
+  color: rgba(238, 247, 241, 0.58);
+  font-size: 12px;
+}
+
+.account-field {
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.account-copy {
+  display: grid;
+  row-gap: 4px;
+  min-width: 0;
+}
+
+.account-copy .hint {
+  line-height: 1.35;
+}
+
+.account-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.account-actions button {
+  min-width: 72px;
+}
+
+footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 8px;
+  background: linear-gradient(to bottom, rgba(17, 20, 24, 0), #111418 35%);
+}
+
+button {
+  min-width: 84px;
+  height: 32px;
+  border: 0;
+  border-radius: 6px;
+  color: #101318;
+  background: #65e08d;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+button.secondary {
+  color: #eef7f1;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid #5aa7ff;
+  outline-offset: 2px;
+}

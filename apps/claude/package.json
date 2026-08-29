@@ -1,0 +1,91 @@
+{
+  "name": "claude-quota-mac",
+  "version": "0.2.2",
+  "description": "macOS 專用的 Claude Code 用量小工具，可監看本機或 claude.ai 帳號的 5 小時與 7 天用量與使用節奏。",
+  "main": "src/main/main.js",
+  "author": "michelle0812 and Claude Usage Widget contributors",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/michelle0812/claude-codex-quota-mac.git"
+  },
+  "homepage": "https://github.com/michelle0812/claude-codex-quota-mac#readme",
+  "bugs": {
+    "url": "https://github.com/michelle0812/claude-codex-quota-mac/issues"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "claude-usage",
+    "usage-widget",
+    "rate-limit",
+    "desktop-widget",
+    "electron",
+    "macos-widget",
+    "claude用量",
+    "claude用量小工具"
+  ],
+  "scripts": {
+    "sync-shared": "node ../../scripts/sync-shared.js",
+    "postinstall": "npm run sync-shared",
+    "prestart": "npm run sync-shared",
+    "predev": "npm run sync-shared",
+    "prebuild": "npm run sync-shared",
+    "prebuild:dir": "npm run sync-shared",
+    "pretest": "npm run sync-shared",
+    "dev": "electron .",
+    "start": "electron .",
+    "test:pace": "node scripts/verify-pace-advice.js",
+    "test:quota-store": "node scripts/verify-quota-store.js",
+    "test:widget-settings": "node scripts/verify-widget-settings.js",
+    "test:app-config": "node scripts/verify-app-config.js",
+    "test:preload": "node scripts/verify-preload.js",
+    "test": "npm run test:pace && npm run test:quota-store && npm run test:widget-settings && npm run test:app-config && npm run test:preload",
+    "build": "npm run build:arm64 && npm run build:x64",
+    "build:dir": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --dir",
+    "build:arm64": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --arm64",
+    "build:x64": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --x64",
+    "prebuild:arm64": "npm run sync-shared",
+    "prebuild:x64": "npm run sync-shared"
+  },
+  "build": {
+    "appId": "com.claude.usage.widget",
+    "productName": "Claude 額度",
+    "afterPack": "scripts/after-pack-macos.js",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "assets/app-icon.png",
+      "assets/app-icon-tray-16.png",
+      "assets/app-icon-256.png",
+      "package.json"
+    ],
+    "mac": {
+      "icon": "assets/app-icon.png",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "ClaudeQuota-${version}-macOS-${arch}.${ext}"
+    }
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  }
+}
