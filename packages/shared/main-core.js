@@ -7,13 +7,28 @@
 // 沒有帳號功能的 app（Codex）把 config.auth 傳成 null 即可，
 // 相關的 IPC 與設定視窗欄位就不會註冊。
 
-const { app, BrowserWindow, ipcMain, screen } = require("electron");
+const { app, BrowserWindow, ipcMain, screen, shell, Notification } = require("electron");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { applyDockVisibility } = require("./dock-visibility");
 const { QuotaStore } = require("./quota-store");
 const { DEFAULT_WIDGET_SETTINGS, normalizeWidgetSettings } = require("./widget-settings");
 const { COMPACT_LAYOUT } = require("./compact-layout");
+const { isNewerVersion, msUntilNextWeeklySlot, fetchLatestRelease, RELEASES_PAGE } = require("./update-check");
+
+// 更新檢查：只提醒，不下載、不自動安裝。檢查時機＝App 每次啟動 + 每週一 10:00（台灣時間）。
+const UPDATE_REPO = "michelle0812/claude-codex-quota-mac";
+let updateState = {
+  checking: false,
+  updateAvailable: false,
+  currentVersion: null,
+  latestVersion: null,
+  releaseUrl: RELEASES_PAGE(UPDATE_REPO),
+  lastCheckedAt: null,
+  error: null
+};
+let updateTimer = null;
+let notifiedForVersion = null;
 
 const HIDDEN_WINDOW_RELEASE_MS = 60 * 1000;
 const SETTINGS_FILE_NAME = "widget-settings.json";
@@ -88,6 +103,7 @@ function startQuotaWidget(rawConfig) {
   app.on("before-quit", () => {
     isQuitting = true;
     cancelWindowRelease();
+    clearTimeout(updateTimer);
     quotaStore?.destroy();
   });
 
@@ -142,7 +158,81 @@ async function startApp() {
   createWindow();
   quotaStore.refreshNow("startup").catch(() => {});
 
+  applyAutoUpdatePreference(signalSettings.autoUpdateCheck);
+
   app.on("activate", showWindow);
+}
+
+// ---- 更新檢查 ----
+
+function broadcastUpdateState() {
+  sendToWindow("update:stateChanged", updateState);
+}
+
+async function runUpdateCheck({ notify } = {}) {
+  if (updateState.checking) return updateState;
+  updateState = { ...updateState, checking: true, error: null };
+  broadcastUpdateState();
+  try {
+    const latest = await fetchLatestRelease(UPDATE_REPO);
+    const current = app.getVersion();
+    const available = isNewerVersion(latest.version, current);
+    updateState = {
+      ...updateState,
+      checking: false,
+      updateAvailable: available,
+      currentVersion: current,
+      latestVersion: latest.version,
+      releaseUrl: latest.url || RELEASES_PAGE(UPDATE_REPO),
+      lastCheckedAt: Date.now(),
+      error: null
+    };
+    if (available && notify && notifiedForVersion !== latest.version) {
+      notifiedForVersion = latest.version;
+      showUpdateNotification(latest.version);
+    }
+  } catch (error) {
+    // 離線 / API 失敗：安靜記錄，不打擾使用者。
+    updateState = {
+      ...updateState,
+      checking: false,
+      lastCheckedAt: Date.now(),
+      error: error.message
+    };
+  }
+  broadcastUpdateState();
+  return updateState;
+}
+
+function showUpdateNotification(version) {
+  if (!Notification.isSupported()) return;
+  const notification = new Notification({
+    title: `${config.productName || app.getName()} 有新版本`,
+    body: `發現 v${version}，點此前往 GitHub 下載（不會自動更新）。`
+  });
+  notification.on("click", () => {
+    shell.openExternal(updateState.releaseUrl || RELEASES_PAGE(UPDATE_REPO)).catch(() => {});
+  });
+  notification.show();
+}
+
+function scheduleWeeklyUpdateCheck() {
+  clearTimeout(updateTimer);
+  // 每週一 10:00 台灣時間（UTC+8，無日光節約）
+  const delay = msUntilNextWeeklySlot(Date.now(), { weekday: 1, hour: 10, minute: 0, tzOffsetMinutes: 480 });
+  updateTimer = setTimeout(() => {
+    runUpdateCheck({ notify: true }).finally(scheduleWeeklyUpdateCheck);
+  }, delay);
+}
+
+function applyAutoUpdatePreference(enabled) {
+  if (enabled) {
+    scheduleWeeklyUpdateCheck();
+    runUpdateCheck({ notify: true }).catch(() => {});
+  } else {
+    clearTimeout(updateTimer);
+    updateTimer = null;
+  }
 }
 
 function createWindow() {
@@ -364,6 +454,13 @@ function registerIpcHandlers() {
   ipcMain.handle("signal:settings:set", (_event, settings) => setSignalSettings(settings));
   ipcMain.handle("signal:settings:reset", () => setSignalSettings(DEFAULT_WIDGET_SETTINGS));
 
+  ipcMain.handle("app:version", () => app.getVersion());
+  ipcMain.handle("update:check", () => runUpdateCheck({ notify: true }));
+  ipcMain.handle("update:state", () => updateState);
+  ipcMain.handle("update:openRelease", () =>
+    shell.openExternal(updateState.releaseUrl || RELEASES_PAGE(UPDATE_REPO))
+  );
+
   if (!config.auth) return;
   ipcMain.handle("auth:status", () => config.auth.hasSession());
   ipcMain.handle("auth:login", () => loginAuthProvider());
@@ -415,9 +512,13 @@ function settingsPath() {
 }
 
 async function setSignalSettings(settings) {
+  const previous = signalSettings;
   signalSettings = normalizeWidgetSettings(settings);
   quotaStore?.setVisibleRefreshIntervalMs(signalSettings.quotaRefreshMs);
   updateDockVisibility(signalSettings.showInDock);
+  if (signalSettings.autoUpdateCheck !== previous?.autoUpdateCheck) {
+    applyAutoUpdatePreference(signalSettings.autoUpdateCheck);
+  }
   await saveSignalSettings();
   sendToWindow("signal:settingsChanged", signalSettings);
   sendToSettingsWindow("signal:settingsChanged", signalSettings);

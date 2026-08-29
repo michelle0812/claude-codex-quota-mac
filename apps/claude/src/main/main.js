@@ -28,7 +28,7 @@ startQuotaWidget({
   rendererHtmlPath: path.join(__dirname, "../shared-gen/renderer.html"),
   settingsHtmlPath: path.join(__dirname, "../shared-gen/settings.html"),
   readQuota,
-  settingsWindowSize: { width: 360, height: 550 },
+  settingsWindowSize: { width: 360, height: 620 },
   auth: {
     configure: (userDataPath) => claudeAiService.configure(userDataPath),
     hasSession: () => claudeAiService.hasSession(),

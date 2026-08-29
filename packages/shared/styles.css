@@ -502,9 +502,64 @@ body[data-state="danger"] .liquid-fill {
   white-space: nowrap;
 }
 
-.arch-badge {
+.update-btn {
   flex: 0 0 auto;
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(238, 247, 241, 0.5);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition: color 0.15s ease;
+}
+
+.update-btn:hover {
+  color: rgba(238, 247, 241, 0.85);
+}
+
+.update-btn .update-glyph {
+  width: 16px;
+  height: 16px;
+  display: none;
+}
+
+.update-btn[data-state="idle"] .update-glyph-idle,
+.update-btn[data-state="checking"] .update-glyph-idle {
+  display: block;
+}
+
+.update-btn[data-state="available"] .update-glyph-alert {
+  display: block;
+}
+
+.update-btn[data-state="checking"] {
+  cursor: default;
+  animation: update-spin 0.9s linear infinite;
+}
+
+.update-btn[data-state="available"] {
+  color: #ffce4d;
+}
+
+.update-btn[data-state="available"]:hover {
+  color: #ffdd7a;
+}
+
+@keyframes update-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.arch-badge {
+  flex: 0 0 auto;
   padding: 1px 6px;
   border-radius: 5px;
   background: rgba(238, 247, 241, 0.08);

@@ -150,11 +150,30 @@ const els = {
   deltaPaceText: requiredElement("deltaPaceText"),
   statusDot: requiredElement("statusDot"),
   statusText: requiredElement("statusText"),
+  updateBtn: requiredElement("updateBtn"),
   archBadge: requiredElement("archBadge")
 };
 
-// 大面板右下角標這個 build 是哪個架構。緊湊 HUD 不顯示（footer.status 在緊湊模式本來就 display:none）。
+// 大面板右下角標「架構 + 版本」，例如 "arm 1.0.2"。緊湊 HUD 不顯示（footer.status 在緊湊模式本來就 display:none）。
 const ARCH_LABELS = { arm64: "arm", x64: "Intel" };
+const archLabel = ARCH_LABELS[window.quotaBridge.arch] || window.quotaBridge.arch || "";
+let appVersion = "";
+
+function renderArchBadge() {
+  setText(els.archBadge, appVersion ? `${archLabel} ${appVersion}` : archLabel);
+}
+
+function renderUpdateState(state) {
+  const s = state || {};
+  const next = s.checking ? "checking" : s.updateAvailable ? "available" : "idle";
+  els.updateBtn.dataset.state = next;
+  els.updateBtn.title = s.checking
+    ? "檢查更新中…"
+    : s.updateAvailable
+      ? `有新版 ${s.latestVersion}，點擊前往下載`
+      : "檢查更新";
+  els.updateBtn.setAttribute("aria-label", els.updateBtn.title);
+}
 
 const copy = {
   zh: {
@@ -1177,7 +1196,33 @@ window.quotaBridge.onCompactScaleChanged((value) => {
 window.quotaBridge.onCompactDisplayModeChanged(renderCompactDisplayMode);
 window.quotaBridge.onSignalSettingsChanged(renderSignalSettings);
 
-setText(els.archBadge, ARCH_LABELS[window.quotaBridge.arch] || window.quotaBridge.arch || "");
+renderArchBadge();
+window.quotaBridge
+  .getAppVersion()
+  .then((version) => {
+    appVersion = version || "";
+    renderArchBadge();
+  })
+  .catch(() => {});
+
+els.updateBtn.addEventListener("click", async () => {
+  const current = els.updateBtn.dataset.state;
+  if (current === "checking") return;
+  if (current === "available") {
+    window.quotaBridge.openReleasePage().catch(reportInteractionError);
+    return;
+  }
+  els.updateBtn.dataset.state = "checking";
+  els.updateBtn.title = "檢查更新中…";
+  try {
+    renderUpdateState(await window.quotaBridge.checkForUpdate());
+  } catch (error) {
+    renderUpdateState({ updateAvailable: false });
+    reportInteractionError(error);
+  }
+});
+window.quotaBridge.onUpdateStateChanged(renderUpdateState);
+window.quotaBridge.getUpdateState().then(renderUpdateState).catch(() => {});
 
 renderLoading();
 syncAlwaysOnTop();

@@ -2,7 +2,8 @@ const DEFAULT_WIDGET_SETTINGS = Object.freeze({
   recentFastBreathMs: 4000,
   criticalBlinkMs: 3000,
   quotaRefreshMs: 3 * 60 * 1000,
-  showInDock: true
+  showInDock: true,
+  autoUpdateCheck: true
 });
 
 function normalizeWidgetSettings(settings) {
@@ -10,7 +11,11 @@ function normalizeWidgetSettings(settings) {
     recentFastBreathMs: clampSignalMs(settings?.recentFastBreathMs, DEFAULT_WIDGET_SETTINGS.recentFastBreathMs),
     criticalBlinkMs: clampSignalMs(settings?.criticalBlinkMs, DEFAULT_WIDGET_SETTINGS.criticalBlinkMs),
     quotaRefreshMs: clampQuotaRefreshMs(settings?.quotaRefreshMs, DEFAULT_WIDGET_SETTINGS.quotaRefreshMs),
-    showInDock: settings?.showInDock === undefined ? DEFAULT_WIDGET_SETTINGS.showInDock : Boolean(settings.showInDock)
+    showInDock: settings?.showInDock === undefined ? DEFAULT_WIDGET_SETTINGS.showInDock : Boolean(settings.showInDock),
+    autoUpdateCheck:
+      settings?.autoUpdateCheck === undefined
+        ? DEFAULT_WIDGET_SETTINGS.autoUpdateCheck
+        : Boolean(settings.autoUpdateCheck)
   };
 }
 

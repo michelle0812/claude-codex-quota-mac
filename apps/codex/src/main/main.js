@@ -14,6 +14,6 @@ startQuotaWidget({
   rendererHtmlPath: path.join(__dirname, "../shared-gen/renderer.html"),
   settingsHtmlPath: path.join(__dirname, "../shared-gen/settings.html"),
   readQuota: getQuota,
-  settingsWindowSize: { width: 360, height: 500 },
+  settingsWindowSize: { width: 360, height: 570 },
   auth: null
 });

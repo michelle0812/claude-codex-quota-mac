@@ -12,7 +12,8 @@ const DEFAULTS = {
   recentFastBreathMs: 4000,
   criticalBlinkMs: 3000,
   quotaRefreshMs: 3 * 60 * 1000,
-  showInDock: true
+  showInDock: true,
+  autoUpdateCheck: true
 };
 
 const els = {
@@ -24,6 +25,7 @@ const els = {
   quotaRefreshRange: document.getElementById("quotaRefreshRange"),
   quotaRefreshInput: document.getElementById("quotaRefreshInput"),
   showInDockInput: document.getElementById("showInDockInput"),
+  autoUpdateCheckInput: document.getElementById("autoUpdateCheckInput"),
   resetBtn: document.getElementById("resetBtn"),
   saveBtn: document.getElementById("saveBtn"),
   authField: null,
@@ -70,6 +72,7 @@ function renderSettings(settings = DEFAULTS) {
   setPair(els.criticalRange, els.criticalInput, secondsFromMs(settings.criticalBlinkMs, DEFAULTS.criticalBlinkMs));
   setPair(els.quotaRefreshRange, els.quotaRefreshInput, minutesFromMs(settings.quotaRefreshMs, DEFAULTS.quotaRefreshMs));
   els.showInDockInput.checked = settings.showInDock ?? DEFAULTS.showInDock;
+  els.autoUpdateCheckInput.checked = settings.autoUpdateCheck ?? DEFAULTS.autoUpdateCheck;
 }
 
 function readSettings() {
@@ -77,7 +80,8 @@ function readSettings() {
     recentFastBreathMs: msFromSeconds(els.recentFastInput.value, DEFAULTS.recentFastBreathMs),
     criticalBlinkMs: msFromSeconds(els.criticalInput.value, DEFAULTS.criticalBlinkMs),
     quotaRefreshMs: msFromMinutes(els.quotaRefreshInput.value, DEFAULTS.quotaRefreshMs),
-    showInDock: els.showInDockInput.checked
+    showInDock: els.showInDockInput.checked,
+    autoUpdateCheck: els.autoUpdateCheckInput.checked
   };
 }
 
@@ -182,6 +186,7 @@ bindPair(els.quotaRefreshRange, els.quotaRefreshInput);
 els.saveBtn.addEventListener("click", () => saveSettings(true).catch(showError));
 els.resetBtn.addEventListener("click", () => resetSettings().catch(showError));
 els.showInDockInput.addEventListener("change", () => saveSettings().catch(showError));
+els.autoUpdateCheckInput.addEventListener("change", () => saveSettings().catch(showError));
 window.quotaBridge.onSignalSettingsChanged(renderSettings);
 window.quotaBridge.getSignalSettings().then(renderSettings).catch(showError);
 

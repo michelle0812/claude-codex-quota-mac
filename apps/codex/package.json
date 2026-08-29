@@ -1,6 +1,6 @@
 {
   "name": "codex-quota-mac",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "macOS 專用的 Codex 額度小工具，可監看本機 Codex 用量與使用節奏。",
   "main": "src/main/main.js",
   "author": "michelle0812 and Codex Quota Widget contributors",
@@ -42,13 +42,14 @@
     "test:widget-settings": "node scripts/verify-widget-settings.js",
     "test:app-config": "node scripts/verify-app-config.js",
     "test:preload": "node scripts/verify-preload.js",
-    "test": "npm run test:pace && npm run test:quota-store && npm run test:codex-path && npm run test:widget-settings && npm run test:app-config && npm run test:preload",
+    "test": "npm run test:pace && npm run test:quota-store && npm run test:codex-path && npm run test:widget-settings && npm run test:app-config && npm run test:preload && npm run test:update-check",
     "build": "npm run build:arm64 && npm run build:x64",
     "build:dir": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --dir",
     "build:arm64": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --arm64",
     "build:x64": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --x64",
     "prebuild:arm64": "npm run sync-shared",
-    "prebuild:x64": "npm run sync-shared"
+    "prebuild:x64": "npm run sync-shared",
+    "test:update-check": "node scripts/verify-update-check.js"
   },
   "build": {
     "appId": "cn.codex.quota.widget",

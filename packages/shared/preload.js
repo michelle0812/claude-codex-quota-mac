@@ -43,6 +43,13 @@ contextBridge.exposeInMainWorld("quotaBridge", {
   getAuthStatus: () => ipcRenderer.invoke("auth:status"),
   login: () => ipcRenderer.invoke("auth:login"),
   logout: () => ipcRenderer.invoke("auth:logout"),
+  getAppVersion: () => ipcRenderer.invoke("app:version"),
+  checkForUpdate: () => ipcRenderer.invoke("update:check"),
+  getUpdateState: () => ipcRenderer.invoke("update:state"),
+  openReleasePage: () => ipcRenderer.invoke("update:openRelease"),
+  onUpdateStateChanged: (callback) => {
+    ipcRenderer.on("update:stateChanged", (_event, value) => callback(value));
+  },
   onQuotaChanged: (callback) => {
     ipcRenderer.on("quota:changed", (_event, value) => callback(value));
   },

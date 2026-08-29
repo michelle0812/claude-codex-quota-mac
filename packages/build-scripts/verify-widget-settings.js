@@ -18,6 +18,8 @@ const migrated = normalizeWidgetSettings({
   quotaRefreshMs: 10 * 60 * 1000
 });
 assert.equal(migrated.showInDock, true);
+assert.equal(migrated.autoUpdateCheck, true);
+assert.equal(normalizeWidgetSettings({ autoUpdateCheck: false }).autoUpdateCheck, false);
 
 const dockCalls = [];
 const dock = {

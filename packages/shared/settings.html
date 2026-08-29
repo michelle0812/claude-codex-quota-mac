@@ -11,7 +11,7 @@
     <main class="settings-shell">
       <header>
         <h1>小工具設定</h1>
-        <p id="statusText">時間設定需按「儲存」；Dock 開關會立即套用</p>
+        <p id="statusText">時間設定需按「儲存」；Dock 與「自動檢查更新」開關會立即套用</p>
       </header>
 
       <section class="field">
@@ -45,6 +45,17 @@
         </div>
         <label class="switch" aria-label="在 Dock 顯示圖示">
           <input id="showInDockInput" type="checkbox" />
+          <span class="switch-track" aria-hidden="true"></span>
+        </label>
+      </section>
+
+      <section class="field toggle-field">
+        <div class="toggle-copy">
+          <label for="autoUpdateCheckInput">自動檢查更新</label>
+          <p>每次啟動與每週一上午 10:00（台灣時間）連線 GitHub 檢查新版。只提醒，不會自動下載或安裝。切換後立即套用。</p>
+        </div>
+        <label class="switch" aria-label="自動檢查更新">
+          <input id="autoUpdateCheckInput" type="checkbox" />
           <span class="switch-track" aria-hidden="true"></span>
         </label>
       </section>
