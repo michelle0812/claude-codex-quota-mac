@@ -55,6 +55,7 @@
     "appId": "com.claude.usage.widget",
     "productName": "Claude 額度",
     "afterPack": "scripts/after-pack-macos.js",
+    "afterAllArtifactBuild": "scripts/after-all-artifact-build.js",
     "directories": {
       "output": "dist"
     },

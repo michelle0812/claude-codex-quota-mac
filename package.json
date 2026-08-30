@@ -27,6 +27,7 @@
     "test:all": "npm run test:claude && npm run test:codex",
     "build:claude": "npm --prefix apps/claude run build",
     "build:codex": "npm --prefix apps/codex run build",
-    "build:all": "npm run build:claude && npm run build:codex"
+    "build:all": "npm run build:claude && npm run build:codex",
+    "build-release": "node scripts/build-release.js"
   }
 }
