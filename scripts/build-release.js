@@ -4,10 +4,13 @@
 // 打包一次發佈用的全部檔案，集中到 repo 根的 dist-release/。
 //
 // 產出：
-//   ClaudeQuota-<版本>-macOS-arm.dmg      / -intel.dmg
-//   CodexQuota-<版本>-macOS-arm.dmg       / -intel.dmg
-//   合併下載版.arm.zip    （Claude 額度.app + Codex 額度.app，Apple Silicon）
-//   合併下載版.intel.zip  （同上，Intel）
+//   ClaudeQuota-<版本>-macOS-arm.dmg          / -intel.dmg
+//   CodexQuota-<版本>-macOS-arm.dmg           / -intel.dmg
+//   ClaudeCodexQuota-<版本>-macOS-arm.zip     / -intel.zip
+//     （合併下載版：一包含 Claude 額度.app + Codex 額度.app）
+//
+// 註：合併 zip 本來想叫「合併下載版.arm.zip」，但 GitHub Release 會把 asset
+//     檔名裡的非拉丁字元整段吃掉，只能用 ASCII 名。
 //
 // dmg 由各 app 的 electron-builder 產出、afterAllArtifactBuild 事後把 arm64->arm、
 // x64->intel 改名。這支只負責跑 build、組合併 zip、把東西收進 dist-release/。
@@ -29,9 +32,13 @@ const APPS = [
 ];
 
 // electron-builder 的 mac 輸出目錄：arm64 在 mac-arm64/，x64 在 mac/。
+function combinedZipName(v, key) {
+  return `ClaudeCodexQuota-${v}-macOS-${key}.zip`;
+}
+
 const ARCHES = [
-  { key: "arm", outDir: "mac-arm64", zip: "合併下載版.arm.zip" },
-  { key: "intel", outDir: "mac", zip: "合併下載版.intel.zip" }
+  { key: "arm", outDir: "mac-arm64" },
+  { key: "intel", outDir: "mac" }
 ];
 
 function sh(cmd, args, opts = {}) {
@@ -91,7 +98,7 @@ function main() {
     // 不帶 --keepParent：壓縮檔內就是兩個 .app 平放在最上層。
     // 不用 --sequesterRsrc：那會生出一堆 __MACOSX/._ 檔；不帶它時 ditto 會把
     // xattr（含程式簽章）存進 zip 的 extra field，macOS 解壓後簽章仍完整。
-    const zipPath = path.join(releaseDir, arch.zip);
+    const zipPath = path.join(releaseDir, combinedZipName(v, arch.key));
     sh("ditto", ["-c", "-k", stage, zipPath]);
     fs.rmSync(stage, { recursive: true, force: true });
   }
