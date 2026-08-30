@@ -1,6 +1,6 @@
 {
   "name": "codex-quota-mac",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "macOS 專用的 Codex 額度小工具，可監看本機 Codex 用量與使用節奏。",
   "main": "src/main/main.js",
   "author": "michelle0812 and Codex Quota Widget contributors",
@@ -28,9 +28,10 @@
   ],
   "scripts": {
     "sync-shared": "node ../../scripts/sync-shared.js",
-    "postinstall": "npm run sync-shared",
-    "prestart": "npm run sync-shared",
-    "predev": "npm run sync-shared",
+    "heal-electron": "node ../../scripts/heal-electron.js apps/codex",
+    "postinstall": "npm run sync-shared && npm run heal-electron",
+    "prestart": "npm run sync-shared && npm run heal-electron",
+    "predev": "npm run sync-shared && npm run heal-electron",
     "prebuild": "npm run sync-shared",
     "prebuild:dir": "npm run sync-shared",
     "pretest": "npm run sync-shared",

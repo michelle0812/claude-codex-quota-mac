@@ -274,11 +274,23 @@ function createWindow() {
     window.webContents.send("signal:settingsChanged", signalSettings);
   });
 
-  window.once("ready-to-show", () => {
+  window.once("ready-to-show", async () => {
     if (window.isDestroyed()) return;
     window.show();
-    placeWindow(window);
+    // 先把尺寸交給模式邏輯處理（compact 需要），位置能還原就還原、不能就走預設歸位。
+    if (isCompactMode) {
+      setCompactTopStrip(false);
+      isCompactExpanded = false;
+      resizeCompactWindow(window);
+    }
+    const restored = await restoreWindowBounds(window).catch(() => false);
+    if (!restored) placeWindow(window);
   });
+
+  const onBoundsChanged = () => scheduleSaveWindowBounds(window);
+  window.on("moved", onBoundsChanged);
+  window.on("resize", onBoundsChanged);
+  window.on("close", () => flushSaveWindowBounds(window));
 
   window.on("show", () => {
     cancelWindowRelease();
@@ -495,16 +507,29 @@ function broadcastAuthStatus(loggedIn) {
   sendToSettingsWindow("auth:statusChanged", loggedIn);
 }
 
-async function loadSignalSettings() {
+async function readSettingsFile() {
   try {
     const payload = JSON.parse(await fs.readFile(settingsPath(), "utf8"));
-    return normalizeWidgetSettings(payload?.signal);
+    return payload && typeof payload === "object" ? payload : {};
   } catch (error) {
     if (error?.code !== "ENOENT") {
       console.warn(`Failed to read widget settings: ${error.message}`);
     }
-    return { ...DEFAULT_WIDGET_SETTINGS };
+    return {};
   }
+}
+
+async function writeSettingsFile(patch) {
+  const filePath = settingsPath();
+  const current = await readSettingsFile();
+  const payload = { version: 1, ...current, ...patch };
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+}
+
+async function loadSignalSettings() {
+  const payload = await readSettingsFile();
+  return normalizeWidgetSettings(payload?.signal);
 }
 
 function settingsPath() {
@@ -532,13 +557,69 @@ function updateDockVisibility(showInDock) {
 }
 
 async function saveSignalSettings() {
-  const filePath = settingsPath();
-  const payload = {
-    version: 1,
-    signal: signalSettings
-  };
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  await writeSettingsFile({ signal: signalSettings });
+}
+
+// ── 視窗位置記憶 ──────────────────────────────────────────────
+// full / compact 兩種模式各存一組 bounds 進 widget-settings.json 的 windowBounds。
+// 重開時先試著還原；螢幕拔掉或位置跑出可視範圍就退回預設歸位。
+
+let saveWindowBoundsTimer = null;
+
+function currentWindowModeKey() {
+  return isCompactMode ? "compact" : "full";
+}
+
+async function loadWindowBounds() {
+  const payload = await readSettingsFile();
+  const bounds = payload?.windowBounds;
+  return bounds && typeof bounds === "object" ? bounds : {};
+}
+
+function persistWindowBounds(window = getLiveWindow()) {
+  if (!window || window.isDestroyed()) return;
+  const bounds = window.getBounds();
+  const modeKey = currentWindowModeKey();
+  loadWindowBounds()
+    .then((saved) => writeSettingsFile({ windowBounds: { ...saved, [modeKey]: bounds } }))
+    .catch((error) => console.warn(`Failed to persist window bounds: ${error.message}`));
+}
+
+function scheduleSaveWindowBounds(window = getLiveWindow()) {
+  clearTimeout(saveWindowBoundsTimer);
+  saveWindowBoundsTimer = setTimeout(() => persistWindowBounds(window), 400);
+}
+
+function flushSaveWindowBounds(window = getLiveWindow()) {
+  clearTimeout(saveWindowBoundsTimer);
+  saveWindowBoundsTimer = null;
+  persistWindowBounds(window);
+}
+
+// 這個矩形有沒有「夠多」落在某個現有螢幕的工作區內（避免還原到已拔掉的螢幕或畫面外）。
+function boundsAreVisible(bounds) {
+  if (!bounds || !Number.isFinite(bounds.x) || !Number.isFinite(bounds.y)) return false;
+  if (!Number.isFinite(bounds.width) || !Number.isFinite(bounds.height)) return false;
+  if (bounds.width <= 0 || bounds.height <= 0) return false;
+  const area = bounds.width * bounds.height;
+  for (const display of screen.getAllDisplays()) {
+    const wa = display.workArea;
+    const overlapX = Math.max(0, Math.min(bounds.x + bounds.width, wa.x + wa.width) - Math.max(bounds.x, wa.x));
+    const overlapY = Math.max(0, Math.min(bounds.y + bounds.height, wa.y + wa.height) - Math.max(bounds.y, wa.y));
+    if (overlapX * overlapY >= area * 0.4) return true;
+  }
+  return false;
+}
+
+async function restoreWindowBounds(window = getLiveWindow()) {
+  if (!window || window.isDestroyed()) return false;
+  const saved = await loadWindowBounds();
+  const target = saved?.[currentWindowModeKey()];
+  if (!boundsAreVisible(target)) return false;
+  // 尺寸交給模式自己的 resize 邏輯決定，這裡只還原位置。
+  const { width, height } = window.getBounds();
+  window.setBounds({ x: Math.round(target.x), y: Math.round(target.y), width, height });
+  return true;
 }
 
 function setAlwaysOnTop(value) {

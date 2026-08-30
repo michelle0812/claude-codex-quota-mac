@@ -149,6 +149,14 @@ button {
   background: #65e08d;
 }
 
+/* 健康狀態的燈號改吃 App 主色，讓 Claude（水藍）與 Codex（綠）一眼分得出來。
+   .pace-badge / .compact-advice 的 .good 是「節奏」健康度、屬另一個語意，不受影響。 */
+.traffic-light.good,
+.status-dot.good {
+  color: var(--app-weekly-strong);
+  background: var(--app-weekly-strong);
+}
+
 .warning {
   color: #ffd166;
   background: #ffd166;
@@ -208,9 +216,9 @@ button {
 .icon-button:hover,
 .text-button:hover,
 .icon-button.active {
-  border-color: rgba(101, 224, 141, 0.48);
+  border-color: rgba(var(--app-weekly-rgb), 0.48);
   color: #ffffff;
-  background: rgba(101, 224, 141, 0.16);
+  background: rgba(var(--app-weekly-rgb), 0.16);
 }
 
 .icon-button:active,
