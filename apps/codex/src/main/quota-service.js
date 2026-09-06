@@ -73,6 +73,23 @@ function buildCodexSpawnEnv(codexPath, env = process.env) {
   return { ...env, PATH: nextPath };
 }
 
+// 大面板 footer 顯示登入帳號用：從 ~/.codex/auth.json 的 id_token（JWT）本機解碼出 email，
+// 不驗簽、不連網。讀不到就回 null，footer 那格自動隱藏。
+async function readCodexAccountEmail() {
+  try {
+    const raw = await fs.promises.readFile(path.join(os.homedir(), ".codex", "auth.json"), "utf8");
+    const idToken = JSON.parse(raw)?.tokens?.id_token;
+    const payloadPart = typeof idToken === "string" ? idToken.split(".")[1] : null;
+    if (!payloadPart) return null;
+    const json = Buffer.from(payloadPart.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+    const payload = JSON.parse(json);
+    const email = payload?.email || payload?.["https://api.openai.com/profile"]?.email || null;
+    return typeof email === "string" && email.includes("@") ? email : null;
+  } catch {
+    return null;
+  }
+}
+
 async function getQuota() {
   const response = await requestRateLimits();
   const snapshot = response.rateLimitsByLimitId?.codex;
@@ -81,7 +98,12 @@ async function getQuota() {
     throw new Error("Codex did not return the codex rate-limit snapshot.");
   }
 
-  return normalizeSnapshot(snapshot);
+  const accountEmail = await readCodexAccountEmail();
+  return {
+    ...normalizeSnapshot(snapshot),
+    source: "codex",
+    account: { email: accountEmail, label: null, source: "codex" }
+  };
 }
 
 function normalizeSnapshot(snapshot) {

@@ -150,6 +150,7 @@ const els = {
   deltaPaceText: requiredElement("deltaPaceText"),
   statusDot: requiredElement("statusDot"),
   statusText: requiredElement("statusText"),
+  accountBadge: requiredElement("accountBadge"),
   updateBtn: requiredElement("updateBtn"),
   archBadge: requiredElement("archBadge")
 };
@@ -173,6 +174,36 @@ function renderUpdateState(state) {
       ? `有新版 ${s.latestVersion}，點擊前往下載`
       : "檢查更新";
   els.updateBtn.setAttribute("aria-label", els.updateBtn.title);
+}
+
+// footer 中段：顯示「目前面板的額度數字是用哪個帳號拿到的」，email 一律遮罩
+// （例：zhugong@example.com -> z•••@example.com）。緊湊模式 footer.status 本來就 display:none。
+function maskEmail(value) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  const at = raw.lastIndexOf("@");
+  if (at <= 0 || at === raw.length - 1) return raw; // 不是 email 就原樣（例如組織名）
+  const local = raw.slice(0, at);
+  const domain = raw.slice(at + 1);
+  const dots = "•".repeat(Math.max(2, Math.min(local.length - 1, 3)));
+  return `${local[0]}${dots}@${domain}`;
+}
+
+function accountSourceLabel(source) {
+  if (source === "claude.ai") return t("account.cloud");
+  if (source === "local") return t("account.local");
+  if (source === "codex") return t("account.codex");
+  return t("account.fallback");
+}
+
+function renderAccountBadge(quota) {
+  const account = quota?.account;
+  const shown = account?.email ? maskEmail(account.email) : account?.label || "";
+  setText(els.accountBadge, shown);
+  if (shown) {
+    setAttr(els.accountBadge, "title", accountSourceLabel(account?.source));
+  } else {
+    els.accountBadge.removeAttribute("title");
+  }
 }
 
 const copy = {
@@ -201,6 +232,12 @@ const copy = {
     statusReady: "額度已更新",
     statusError: "無法讀取額度",
     authRequired: "尚未偵測到額度資料",
+    account: {
+      cloud: "claude.ai 帳號",
+      local: "本機 Claude Code 帳號",
+      codex: "Codex 帳號",
+      fallback: "目前額度來源帳號"
+    },
     paceTitle: "使用節奏建議",
     weeklyPace: "7天節奏",
     actualRemaining: "實際已用",
@@ -261,6 +298,12 @@ const copy = {
     statusReady: "Quota updated",
     statusError: "Unable to read quota",
     authRequired: "Quota data not found",
+    account: {
+      cloud: "claude.ai account",
+      local: "local Claude Code account",
+      codex: "Codex account",
+      fallback: "account behind the current quota"
+    },
     paceTitle: "Usage pace advice",
     weeklyPace: "7-day pace",
     actualRemaining: "Used",
@@ -462,6 +505,7 @@ function renderQuota(quota) {
   setText(els.planText, quota?.planType || t("unknown"));
 
   renderPaceAdvice(quota?.paceAdvice);
+  renderAccountBadge(quota);
 }
 
 function renderPaceAdvice(advice) {
@@ -682,6 +726,7 @@ function renderLoading() {
   els.statusDot.className = "status-dot loading";
   setText(els.stateText, t("loading"));
   setText(els.statusText, t("statusLoading"));
+  renderAccountBadge(state.quota); // 有舊資料就沿用舊帳號，冷啟動時清空
   if (!state.quota) {
     renderCompactHud(null);
     renderCompactAdvice(null);
@@ -704,6 +749,7 @@ function renderError(error) {
   setText(els.secondaryText, "--");
   setText(els.planText, "--");
   renderPaceAdvice(null);
+  renderAccountBadge(null);
 }
 
 function renderQuotaState(snapshot) {

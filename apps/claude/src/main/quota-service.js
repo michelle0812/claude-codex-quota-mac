@@ -79,6 +79,18 @@ async function readPlan() {
   return null;
 }
 
+// 大面板 footer 顯示登入帳號用：本機 Claude Code 的 OAuth 帳號 email
+// （~/.claude.json 的 oauthAccount.emailAddress）。讀不到就回 null，footer 那格自動隱藏。
+async function readLocalAccountEmail() {
+  try {
+    const cfg = JSON.parse(await fs.readFile(CLAUDE_CONFIG_FILE, "utf8"));
+    const email = cfg?.oauthAccount?.emailAddress;
+    return typeof email === "string" && email.includes("@") ? email : null;
+  } catch {
+    return null;
+  }
+}
+
 async function getQuota() {
   const data = await readStatusFile();
   const limits = data?.rate_limits;
@@ -95,7 +107,7 @@ async function getQuota() {
     throw new Error(`usage-status.json 已 ${minutes} 分鐘沒有更新，請開一個 Claude Code session 讓它刷新。`);
   }
 
-  const plan = await readPlan();
+  const [plan, accountEmail] = await Promise.all([readPlan(), readLocalAccountEmail()]);
   const snapshot = {
     limitId: "claude",
     limitName: data?.model?.display_name ? `Claude Code · ${data.model.display_name}` : "Claude Code",
@@ -112,7 +124,8 @@ async function getQuota() {
   return {
     ...normalized,
     fetchedAt,
-    paceAdvice: buildPaceAdvice({ ...normalized, fetchedAt }, fetchedAt)
+    paceAdvice: buildPaceAdvice({ ...normalized, fetchedAt }, fetchedAt),
+    account: { email: accountEmail, label: null, source: "local" }
   };
 }
 

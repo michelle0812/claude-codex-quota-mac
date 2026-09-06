@@ -16,8 +16,10 @@ const { normalizeSnapshot, readPlan } = require("./quota-service");
 const CLAUDE_ORIGIN = "https://claude.ai";
 const LOGIN_URL = "https://claude.ai/login";
 const ORGANIZATIONS_URL = "https://claude.ai/api/organizations";
+const ACCOUNT_URL = "https://claude.ai/api/account";
 const CREDENTIALS_FILE_NAME = "claude-ai-credentials.json";
-const CREDENTIALS_VERSION = 1;
+// v2：多存 accountEmail / accountLabel（大面板 footer 顯示「這個面板的數字是哪個帳號拿的」）。
+const CREDENTIALS_VERSION = 2;
 
 const CHROME_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -42,6 +44,8 @@ const BLOCKED_SIGNATURES = [
 ];
 
 let credentialsFilePath = null;
+// 舊憑證檔（v1）沒有 accountEmail：每個 app session 只在背景補抓一次，抓不到就別再打擾。
+let accountEmailProbed = false;
 
 function configure(userDataPath) {
   if (!userDataPath) {
@@ -86,18 +90,25 @@ async function loadCredentials() {
   if (!raw) return null;
   const sessionKey = decryptSessionKey(raw);
   if (!sessionKey || !raw.organizationId) return null;
-  return { sessionKey, organizationId: raw.organizationId };
+  return {
+    sessionKey,
+    organizationId: raw.organizationId,
+    accountEmail: typeof raw.accountEmail === "string" ? raw.accountEmail : null,
+    accountLabel: typeof raw.accountLabel === "string" ? raw.accountLabel : null
+  };
 }
 
 async function hasSession() {
   return Boolean(await loadCredentials());
 }
 
-async function saveCredentials({ sessionKey, organizationId }) {
+async function saveCredentials({ sessionKey, organizationId, accountEmail = null, accountLabel = null }) {
   ensureConfigured();
   const payload = {
     version: CREDENTIALS_VERSION,
     organizationId,
+    accountEmail: accountEmail || null,
+    accountLabel: accountLabel || null,
     savedAt: new Date().toISOString()
   };
   if (safeStorage.isEncryptionAvailable()) {
@@ -113,6 +124,7 @@ async function saveCredentials({ sessionKey, organizationId }) {
 
 async function clearCredentials() {
   ensureConfigured();
+  accountEmailProbed = false;
   try {
     await fs.unlink(credentialsFilePath);
   } catch (error) {
@@ -217,7 +229,22 @@ async function fetchOrganizationId() {
   if (!organizationId) {
     throw new Error("claude.ai 組織資料缺少 uuid");
   }
-  return organizationId;
+  return { organizationId, organizationName: typeof org.name === "string" ? org.name : null };
+}
+
+// 大面板 footer 要顯示登入帳號（遮罩 email）。claude.ai 沒公開這個，靠登入後的 session
+// 打帳號 endpoint 拿。回應形狀在未來改版可能變，多試幾個欄位；失敗回 null，不讓登入整體失敗。
+async function fetchAccountEmail() {
+  try {
+    const data = await fetchJsonViaWindow(ACCOUNT_URL);
+    const account = data && typeof data === "object" ? data.account || data : {};
+    const email =
+      account.email_address || account.email || data?.email_address || data?.email || null;
+    return typeof email === "string" && email.includes("@") ? email : null;
+  } catch (error) {
+    console.warn(`讀取 claude.ai 帳號 email 失敗：${error.message}`);
+    return null;
+  }
 }
 
 function isAllowedLoginUrl(url) {
@@ -291,8 +318,15 @@ async function login() {
   }
   const sessionKey = await captureSessionKey();
   await setSessionCookie(sessionKey);
-  const organizationId = await fetchOrganizationId();
-  await saveCredentials({ sessionKey, organizationId });
+  const { organizationId, organizationName } = await fetchOrganizationId();
+  const accountEmail = await fetchAccountEmail();
+  await saveCredentials({
+    sessionKey,
+    organizationId,
+    accountEmail,
+    accountLabel: organizationName
+  });
+  accountEmailProbed = true;
   return { organizationId };
 }
 
@@ -333,6 +367,8 @@ async function getQuota() {
     throw new Error("claude.ai 回傳的用量資料缺少 five_hour / seven_day 區塊。");
   }
 
+  const { accountEmail, accountLabel } = await resolveAccount(credentials);
+
   const plan = await readPlan();
   const snapshot = {
     limitId: "claude",
@@ -344,7 +380,30 @@ async function getQuota() {
     secondary: toWindow(sevenDay, SEVEN_DAY_WINDOW_MINS)
   };
 
-  return { ...normalizeSnapshot(snapshot), source: "claude.ai" };
+  return {
+    ...normalizeSnapshot(snapshot),
+    source: "claude.ai",
+    account: { email: accountEmail || null, label: accountLabel || null, source: "claude.ai" }
+  };
+}
+
+// v2 憑證檔已經存了 accountEmail 就直接用；舊檔沒有的話，這個 app session 背景補抓一次寫回。
+async function resolveAccount(credentials) {
+  let accountEmail = credentials.accountEmail;
+  const accountLabel = credentials.accountLabel;
+  if (!accountEmail && !accountEmailProbed) {
+    accountEmailProbed = true;
+    accountEmail = await fetchAccountEmail();
+    if (accountEmail) {
+      await saveCredentials({
+        sessionKey: credentials.sessionKey,
+        organizationId: credentials.organizationId,
+        accountEmail,
+        accountLabel
+      }).catch((error) => console.warn(`回寫 claude.ai 帳號 email 失敗：${error.message}`));
+    }
+  }
+  return { accountEmail, accountLabel };
 }
 
 module.exports = {
