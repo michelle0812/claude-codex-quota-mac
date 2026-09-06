@@ -1,108 +1,222 @@
-const { spawn } = require("node:child_process");
-const fs = require("node:fs");
+const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
-const { version: APP_VERSION } = require("../../package.json");
 const { buildPaceAdvice } = require("../shared-gen/pace-advice");
 
-const DEFAULT_TIMEOUT_MS = 12000;
+// Codex 額度 = ChatGPT 訂閱方案的用量。直接打 OpenAI 的內部 endpoint 拿，
+// 憑證用 Codex CLI 登入後留在 ~/.codex/auth.json 的 OAuth token，不再 spawn `codex` 子行程：
+//   GET https://chatgpt.com/backend-api/wham/usage   Authorization: Bearer <access_token>
+// token 過期就用 refresh_token 換新，再原子寫回 auth.json（沿用 Codex CLI 自己的檔案格式）。
+// client id / endpoint 皆為 OpenAI 未公開介面（見 openai/codex codex-rs/login、backend-client），
+// 改版即可能失效。
 
-function resolveCodexPath(options = {}) {
-  const env = options.env || process.env;
-  const homeDir = options.homeDir || os.homedir();
+const DEFAULT_AUTH_FILE = path.join(os.homedir(), ".codex", "auth.json");
+const USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
+const TOKEN_URL = "https://auth.openai.com/oauth/token";
+const OAUTH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
+const REQUEST_TIMEOUT_MS = 12000;
+const TOKEN_REFRESH_SKEW_MS = 5 * 60 * 1000; // 距到期不到 5 分鐘就先 refresh
 
-  if (env.CODEX_CLI_PATH) return env.CODEX_CLI_PATH;
+const FIVE_HOUR_WINDOW_MINS = 5 * 60;
+const SEVEN_DAY_WINDOW_MINS = 7 * 24 * 60;
 
-  const pathMatch = findExecutableOnPath("codex", env.PATH);
-  if (pathMatch) return pathMatch;
-
-  const candidates = [
-    path.join(homeDir, ".local", "bin", "codex"),
-    "/opt/homebrew/bin/codex",
-    "/usr/local/bin/codex",
-    "/opt/local/bin/codex",
-    path.join(homeDir, ".volta", "bin", "codex"),
-    path.join(homeDir, "Library", "pnpm", "codex"),
-    ...findNvmCodexCandidates(homeDir)
-  ];
-
-  return candidates.find(isExecutable) || "codex";
+function resolveAuthFilePath() {
+  return process.env.CODEX_AUTH_FILE || DEFAULT_AUTH_FILE;
 }
 
-function findExecutableOnPath(command, pathValue = "") {
-  for (const directory of pathValue.split(path.delimiter)) {
-    if (!directory) continue;
-    const candidate = path.join(directory, command);
-    if (isExecutable(candidate)) return candidate;
-  }
-  return null;
-}
-
-function findNvmCodexCandidates(homeDir) {
-  const versionsDir = path.join(homeDir, ".nvm", "versions", "node");
-  let versions;
+async function readAuthFile() {
+  const filePath = resolveAuthFilePath();
+  let raw;
   try {
-    versions = fs.readdirSync(versionsDir, { withFileTypes: true });
-  } catch {
-    return [];
+    raw = await fs.readFile(filePath, "utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      // renderer 的 friendlyErrorMessage 會把含 "authentication required" 的錯誤換成友善文案。
+      throw new Error(
+        "Codex authentication required：找不到 ~/.codex/auth.json，請先安裝並執行 `codex login`。"
+      );
+    }
+    throw error;
   }
 
-  return versions
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name)
-    .sort((left, right) => right.localeCompare(left, undefined, { numeric: true }))
-    .map((version) => path.join(versionsDir, version, "bin", "codex"));
-}
-
-function isExecutable(candidate) {
+  let parsed;
   try {
-    fs.accessSync(candidate, fs.constants.X_OK);
-    return true;
-  } catch {
-    return false;
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`~/.codex/auth.json 內容不是有效 JSON：${error.message}`);
   }
+
+  const tokens = parsed?.tokens;
+  if (!tokens?.access_token || !tokens?.refresh_token) {
+    throw new Error(
+      "Codex authentication required：~/.codex/auth.json 缺少登入 token，請重新執行 `codex login`。"
+    );
+  }
+  return { parsed, tokens };
 }
 
-function buildCodexSpawnEnv(codexPath, env = process.env) {
-  const currentPath = env.PATH || "";
-  if (!path.isAbsolute(codexPath)) return { ...env, PATH: currentPath };
-
-  const codexBinDir = path.dirname(codexPath);
-  const pathEntries = currentPath.split(path.delimiter).filter(Boolean);
-  const nextPath = [codexBinDir, ...pathEntries.filter((entry) => entry !== codexBinDir)].join(path.delimiter);
-  return { ...env, PATH: nextPath };
+async function writeAuthFileAtomically(parsed) {
+  const filePath = resolveAuthFilePath();
+  const tempPath = `${filePath}.${process.pid}.tmp`;
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(tempPath, `${JSON.stringify(parsed, null, 2)}\n`, { mode: 0o600 });
+  await fs.rename(tempPath, filePath);
 }
 
-// 大面板 footer 顯示登入帳號用：從 ~/.codex/auth.json 的 id_token（JWT）本機解碼出 email，
-// 不驗簽、不連網。讀不到就回 null，footer 那格自動隱藏。
-async function readCodexAccountEmail() {
+// id_token / access_token 是一起發的，用 id_token 的 exp 當「還新不新」的依據即可。
+function decodeJwtExpiryMs(jwt) {
   try {
-    const raw = await fs.promises.readFile(path.join(os.homedir(), ".codex", "auth.json"), "utf8");
-    const idToken = JSON.parse(raw)?.tokens?.id_token;
-    const payloadPart = typeof idToken === "string" ? idToken.split(".")[1] : null;
+    const payloadPart = String(jwt).split(".")[1];
     if (!payloadPart) return null;
     const json = Buffer.from(payloadPart.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
-    const payload = JSON.parse(json);
-    const email = payload?.email || payload?.["https://api.openai.com/profile"]?.email || null;
-    return typeof email === "string" && email.includes("@") ? email : null;
+    const exp = JSON.parse(json)?.exp;
+    return Number.isFinite(exp) ? exp * 1000 : null;
   } catch {
     return null;
   }
 }
 
-async function getQuota() {
-  const response = await requestRateLimits();
-  const snapshot = response.rateLimitsByLimitId?.codex;
-
-  if (!snapshot) {
-    throw new Error("Codex did not return the codex rate-limit snapshot.");
+async function fetchJson(url, options, label) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let response;
+  try {
+    response = await fetch(url, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (error?.name === "AbortError") throw new Error(`${label}逾時`);
+    throw new Error(`${label}連線失敗：${error.message}`);
+  } finally {
+    clearTimeout(timer);
   }
 
-  const accountEmail = await readCodexAccountEmail();
+  const text = await response.text();
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(
+        `Codex authentication required：登入已失效（${label} ${response.status}），請重新執行 \`codex login\`。`
+      );
+    }
+    throw new Error(`${label}失敗：HTTP ${response.status} ${text.slice(0, 200)}`);
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`${label}回應不是 JSON：${text.slice(0, 200)}`);
+  }
+}
+
+async function refreshTokens(authData) {
+  const data = await fetchJson(
+    TOKEN_URL,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_id: OAUTH_CLIENT_ID,
+        grant_type: "refresh_token",
+        refresh_token: authData.tokens.refresh_token,
+        scope: "openid profile email"
+      })
+    },
+    "刷新 Codex 登入"
+  );
+
+  if (!data?.access_token) {
+    throw new Error("刷新 Codex 登入沒有回傳 access_token。");
+  }
+
+  const nextTokens = {
+    ...authData.tokens,
+    access_token: data.access_token,
+    id_token: data.id_token || authData.tokens.id_token,
+    // OpenAI 每次 refresh 會輪替 refresh_token，一定要寫回。
+    refresh_token: data.refresh_token || authData.tokens.refresh_token
+  };
+  await writeAuthFileAtomically({
+    ...authData.parsed,
+    tokens: nextTokens,
+    last_refresh: new Date().toISOString()
+  });
+  return nextTokens;
+}
+
+async function getValidTokens() {
+  const authData = await readAuthFile();
+  const expiryMs = decodeJwtExpiryMs(authData.tokens.id_token);
+  const needsRefresh = expiryMs === null || expiryMs - Date.now() < TOKEN_REFRESH_SKEW_MS;
+  if (!needsRefresh) return authData.tokens;
+
+  try {
+    return await refreshTokens(authData);
+  } catch (error) {
+    if (String(error?.message).includes("authentication required")) throw error;
+    // refresh 本身失敗（例如暫時性網路問題），手上的 access_token 也許還能撐一下，
+    // 直接拿去打 usage；真的不行 fetchUsage() 會回 auth 錯誤。
+    console.warn(`刷新 Codex 登入失敗，改用現有 token 試一次：${error.message}`);
+    return authData.tokens;
+  }
+}
+
+async function fetchUsage() {
+  const tokens = await getValidTokens();
+  return fetchJson(
+    USAGE_URL,
+    {
+      headers: {
+        Authorization: `Bearer ${tokens.access_token}`,
+        "ChatGPT-Account-Id": tokens.account_id || "",
+        "User-Agent": "codex-cli",
+        Accept: "application/json"
+      }
+    },
+    "讀取 Codex 用量"
+  );
+}
+
+async function getQuota() {
+  const usage = await fetchUsage();
+  const rateLimit = usage?.rate_limit;
+  if (!rateLimit || (!rateLimit.primary_window && !rateLimit.secondary_window)) {
+    throw new Error("Codex 用量回應缺少 rate_limit 區塊。");
+  }
+
+  const snapshot = {
+    limitId: "codex",
+    limitName: "Codex",
+    planType: prettyPlan(usage.plan_type) || "Codex",
+    rateLimitReachedType: usage.rate_limit_reached_type ?? null,
+    credits: null,
+    primary: whamWindow(rateLimit.primary_window, FIVE_HOUR_WINDOW_MINS),
+    secondary: whamWindow(rateLimit.secondary_window, SEVEN_DAY_WINDOW_MINS)
+  };
+
   return {
     ...normalizeSnapshot(snapshot),
     source: "codex",
-    account: { email: accountEmail, label: null, source: "codex" }
+    account: { email: typeof usage.email === "string" ? usage.email : null, label: null, source: "codex" }
+  };
+}
+
+function prettyPlan(raw) {
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  return raw
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+// wham/usage 的 window：{ used_percent, limit_window_seconds, reset_after_seconds, reset_at(epoch 秒) }
+function whamWindow(window, fallbackDurationMins) {
+  if (!window || window.used_percent === undefined || window.used_percent === null) {
+    return null;
+  }
+  const durationSeconds = Number(window.limit_window_seconds);
+  return {
+    usedPercent: window.used_percent,
+    resetsAt: window.reset_at ?? null,
+    windowDurationMins: Number.isFinite(durationSeconds) ? Math.round(durationSeconds / 60) : fallbackDurationMins
   };
 }
 
@@ -165,118 +279,11 @@ function clampPercent(value) {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function requestRateLimits() {
-  const codexPath = resolveCodexPath();
-  const child = spawn(codexPath, ["app-server", "--listen", "stdio://"], {
-    stdio: ["pipe", "pipe", "pipe"],
-    env: buildCodexSpawnEnv(codexPath)
-  });
-
-  let buffer = "";
-  let stderr = "";
-  let nextId = 1;
-  const pending = new Map();
-
-  const cleanup = () => {
-    for (const request of pending.values()) {
-      clearTimeout(request.timer);
-    }
-    pending.clear();
-    if (!child.killed) child.kill();
-  };
-
-  const send = (method, params) => {
-    const id = nextId++;
-    const payload = params === undefined ? { id, method } : { id, method, params };
-    child.stdin.write(`${JSON.stringify(payload)}\n`);
-
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        pending.delete(id);
-        reject(new Error(`Codex request timed out: ${method}`));
-      }, DEFAULT_TIMEOUT_MS);
-      pending.set(id, { resolve, reject, timer });
-    });
-  };
-
-  child.stdout.on("data", (chunk) => {
-    buffer += chunk.toString("utf8");
-    let newlineIndex;
-    while ((newlineIndex = buffer.indexOf("\n")) >= 0) {
-      const line = buffer.slice(0, newlineIndex).trim();
-      buffer = buffer.slice(newlineIndex + 1);
-      if (!line) continue;
-      handleMessage(line, pending);
-    }
-  });
-
-  child.stderr.on("data", (chunk) => {
-    stderr += chunk.toString("utf8");
-  });
-
-  return new Promise((resolve, reject) => {
-    child.once("error", (error) => {
-      cleanup();
-      reject(error);
-    });
-
-    child.once("exit", (code) => {
-      if (pending.size > 0) {
-        cleanup();
-        reject(new Error(stderr || `Codex app-server exited with code ${code}`));
-      }
-    });
-
-    (async () => {
-      try {
-        await send("initialize", {
-          clientInfo: {
-            name: "codex-quota-widget",
-            title: "Codex Quota Widget",
-            version: APP_VERSION
-          },
-          capabilities: null
-        });
-        const result = await send("account/rateLimits/read");
-        cleanup();
-        resolve(result);
-      } catch (error) {
-        cleanup();
-        reject(new Error(stderr || error.message));
-      }
-    })();
-  });
-}
-
-function handleMessage(line, pending) {
-  let message;
-  try {
-    message = JSON.parse(line);
-  } catch (error) {
-    rejectPendingRequests(pending, new Error(`Codex app-server returned invalid JSON: ${error.message}`));
-    return;
-  }
-
-  if (!Object.prototype.hasOwnProperty.call(message, "id")) return;
-  const request = pending.get(message.id);
-  if (!request) return;
-
-  clearTimeout(request.timer);
-  pending.delete(message.id);
-
-  if (message.error) {
-    request.reject(new Error(message.error.message || JSON.stringify(message.error)));
-  } else {
-    request.resolve(message.result);
-  }
-}
-
-function rejectPendingRequests(pending, error) {
-  for (const [id, request] of pending) {
-    clearTimeout(request.timer);
-    pending.delete(id);
-    request.reject(error);
-  }
-}
-
-module.exports = { buildCodexSpawnEnv, getQuota, normalizeSnapshot, resolveCodexPath };
+module.exports = {
+  getQuota,
+  normalizeSnapshot,
+  prettyPlan,
+  whamWindow,
+  decodeJwtExpiryMs,
+  resolveAuthFilePath
+};

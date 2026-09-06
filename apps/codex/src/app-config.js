@@ -18,13 +18,13 @@ window.APP_CONFIG = {
       brand: "Codex 額度",
       statusLoading: "正在讀取 Codex 額度...",
       statusError: "無法讀取 Codex 額度",
-      authRequired: "Codex CLI 需要登入後才能讀取額度"
+      authRequired: "尚未登入 Codex，請先執行 codex login"
     },
     en: {
       brand: "Codex Quota",
       statusLoading: "Reading Codex quota...",
       statusError: "Unable to read Codex quota",
-      authRequired: "Codex CLI must be signed in before quota can be read"
+      authRequired: "Not signed in to Codex - run codex login first"
     }
   },
 

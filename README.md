@@ -6,7 +6,7 @@
 | App | 看什麼 | 資料來源 | 安裝後名稱 |
 |---|---|---|---|
 | **Claude 額度** | Claude Code 用量 | 本機 statusLine hook，或登入 claude.ai 讀帳號級別用量 | `/Applications/Claude 額度.app` |
-| **Codex 額度** | Codex CLI 用量 | 本機 `~/.codex` + Codex CLI | `/Applications/Codex 額度.app` |
+| **Codex 額度** | Codex（ChatGPT 訂閱）用量 | `~/.codex/auth.json` 的登入 token 直接打 OpenAI 用量 API | `/Applications/Codex 額度.app` |
 
 > [!IMPORTANT]
 > **這兩個 App 還沒有 Apple 公證（notarization）**，所以第一次開啟會被 Gatekeeper 擋下來，
@@ -124,7 +124,12 @@ Claude Code ──stdin JSON──▶ usage-statusline.py ──▶ ~/.claude/us
 
 ## Codex 額度：運作方式
 
-直接讀本機 `~/.codex` 並呼叫 Codex CLI 取得用量，不需要安裝任何 hook。
+讀 `~/.codex/auth.json`（Codex CLI 登入後留下的 OAuth token），直接打 OpenAI 的用量 endpoint
+`https://chatgpt.com/backend-api/wham/usage` 取得 5 小時／7 天用量，不需要安裝任何 hook，
+也不需要 `codex` 指令在 PATH 上。token 過期時會自動用 `refresh_token` 換新並寫回 `auth.json`。
+
+只要這台機器 `codex login` 過就能用。`chatgpt.com/backend-api/...` 與 OAuth client id 皆為
+OpenAI 未公開介面，改版即可能失效；真的失效時重跑一次 `codex login` 即可。
 
 ---
 
@@ -132,7 +137,7 @@ Claude Code ──stdin JSON──▶ usage-statusline.py ──▶ ~/.claude/us
 
 - macOS
 - Claude 額度：已安裝並登入 Claude Code，且 `python3` 可用（系統內建即可）；或改用 claude.ai 登入
-- Codex 額度：已安裝並登入 OpenAI Codex CLI
+- Codex 額度：這台機器用 Codex CLI 登入過 ChatGPT（跑過 `codex login`，`~/.codex/auth.json` 存在即可；不需要 `codex` 還在 PATH 上）
 - Node.js 與 npm（僅本機開發或自行建置時需要）
 
 ## 基本操作
@@ -216,7 +221,7 @@ claude-codex-quota-mac/
 |---|---|
 | `apps/<app>/src/app-config.js` | 顯示名稱、mini bar／HUD 主色、文案覆蓋、有沒有帳號登入區塊 |
 | `apps/<app>/src/main/main.js` | 組出 config 傳給 `main-core.js`：圖示路徑、`readQuota`、`auth` |
-| `apps/<app>/src/main/quota-service.js` | 真正去讀額度的方式（Claude 讀檔／API，Codex 跑 CLI） |
+| `apps/<app>/src/main/quota-service.js` | 真正去讀額度的方式（Claude 讀檔／claude.ai API，Codex 打 OpenAI 用量 API） |
 
 主色由 `app-config.js` 的 `accent` 定義，`renderer-core.js` 開場就把它灌進 CSS 變數
 （`--app-weekly` / `--app-short` 等），HUD、玻璃球與頂端細條 mini bar 都吃同一組 token，
@@ -224,7 +229,7 @@ claude-codex-quota-mac/
 `npm test` 裡的 `verify-app-config.js` 會擋住「兩個 App 主色設成一樣」這種回歸。
 
 `quota-store.js` 需要的 `readQuota` 由呼叫端注入——因為 `quota-service.js` 是兩個 App 各自不同的
-（Claude 讀 `usage-status.json` / claude.ai，Codex 跑 Codex CLI），共用模組不綁死其中任何一邊。
+（Claude 讀 `usage-status.json` / claude.ai，Codex 打 `chatgpt.com/backend-api/wham/usage`），共用模組不綁死其中任何一邊。
 
 ## 開發
 
@@ -265,8 +270,9 @@ npm run build:codex
 ## 已知限制
 
 - Claude 版本機來源的新鮮度取決於 statusLine 多久刷新一次；若超過 20 分鐘沒有新的 session 活動，widget 會顯示「資料過期」提示。
-- `used_percentage` 與 `resets_at` 由 Claude Code / Codex CLI 提供，widget 不另行推算絕對 token 數。
+- `used_percentage` 與 `resets_at` 由 Claude Code / OpenAI 用量 API 提供，widget 不另行推算絕對 token 數。
 - claude.ai 資料來源使用非公開的 `claude.ai/api/organizations/<org>/usage`，Anthropic 改版或 Cloudflare 政策調整都可能使其失效；失效時會自動退回本機來源並提示重新登入。
+- Codex 版使用非公開的 `chatgpt.com/backend-api/wham/usage` 與 Codex CLI 的 OAuth client id，OpenAI 改版即可能失效；失效時重跑 `codex login` 即可。
 - 僅支援 macOS，已移除 Windows 11 的建置與發行支援。需要 Windows 版請前往 [stupdada/codex-quota-widget](https://github.com/stupdada/codex-quota-widget)。
 
 ## 專案來源與致謝
