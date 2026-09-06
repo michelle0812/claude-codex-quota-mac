@@ -504,6 +504,7 @@ body[data-state="danger"] .liquid-fill {
 }
 
 #statusText {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -529,7 +530,6 @@ body[data-state="danger"] .liquid-fill {
 
 .update-btn {
   flex: 0 0 auto;
-  margin-left: auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
