@@ -510,6 +510,23 @@ body[data-state="danger"] .liquid-fill {
   white-space: nowrap;
 }
 
+.account-badge {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 46%;
+  overflow: hidden;
+  color: rgba(238, 247, 241, 0.62);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-badge:empty {
+  display: none;
+}
+
 .update-btn {
   flex: 0 0 auto;
   margin-left: auto;
