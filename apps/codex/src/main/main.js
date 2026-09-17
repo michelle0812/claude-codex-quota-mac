@@ -8,12 +8,11 @@
 // profiles.json 裡的其他帳號各帶起一份；已經在跑的會被 single-instance lock 擋掉。
 
 const path = require("node:path");
-const { spawn } = require("node:child_process");
 const { app } = require("electron");
 const { startQuotaWidget } = require("../shared-gen/main-core");
 const { getQuota, resolveAuthFilePath } = require("./quota-service");
 const { createCodexAuth } = require("./codex-auth-service");
-const { DEFAULT_PROFILE_ID, resolveProfile, listExtraProfileIds } = require("./profile");
+const { DEFAULT_PROFILE_ID, resolveProfile, launchExtraProfiles } = require("./profile");
 
 const defaultUserDataPath = app.getPath("userData");
 
@@ -50,28 +49,5 @@ startQuotaWidget({
 });
 
 if (profile.id === DEFAULT_PROFILE_ID) {
-  app.whenReady().then(launchExtraProfiles);
-}
-
-function launchExtraProfiles() {
-  const ids = listExtraProfileIds(defaultUserDataPath);
-  for (const id of ids) {
-    try {
-      launchProfile(id);
-    } catch (error) {
-      console.warn(`帶起 profile ${id} 失敗：${error.message}`);
-    }
-  }
-}
-
-function launchProfile(id) {
-  const args = [`--profile=${id}`];
-  if (app.isPackaged) {
-    // .../Codex 額度.app/Contents/MacOS/Codex 額度 → .../Codex 額度.app
-    const bundlePath = path.resolve(app.getPath("exe"), "..", "..", "..");
-    spawn("/usr/bin/open", ["-n", "-a", bundlePath, "--args", ...args], { detached: true, stdio: "ignore" }).unref();
-    return;
-  }
-  // npm start：直接用同一顆 electron 再開一份。
-  spawn(process.execPath, [app.getAppPath(), ...args], { detached: true, stdio: "ignore" }).unref();
+  app.whenReady().then(() => launchExtraProfiles(app, defaultUserDataPath));
 }

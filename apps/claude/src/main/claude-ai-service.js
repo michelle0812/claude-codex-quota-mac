@@ -342,7 +342,8 @@ function toWindow(raw, windowDurationMins) {
   };
 }
 
-async function getQuota() {
+// useLocalPlan：default 面板沿用本機 Claude Code 的方案字串；額外帳號不是本機那個帳號，不能套用。
+async function getQuota({ useLocalPlan = true } = {}) {
   const credentials = await loadCredentials();
   if (!credentials) {
     throw new Error("尚未登入 claude.ai");
@@ -369,11 +370,11 @@ async function getQuota() {
 
   const { accountEmail, accountLabel } = await resolveAccount(credentials);
 
-  const plan = await readPlan();
+  const plan = useLocalPlan ? await readPlan() : null;
   const snapshot = {
     limitId: "claude",
     limitName: "Claude Code",
-    planType: plan || "Claude Code",
+    planType: plan || (useLocalPlan ? "Claude Code" : "Claude"),
     rateLimitReachedType: null,
     credits: null,
     primary: toWindow(fiveHour, FIVE_HOUR_WINDOW_MINS),
