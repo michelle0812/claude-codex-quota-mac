@@ -70,13 +70,7 @@
     "mac": {
       "icon": "assets/app-icon.png",
       "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
-        }
+        "dmg"
       ],
       "artifactName": "ClaudeQuota-${version}-macOS-${arch}.${ext}"
     }
