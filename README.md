@@ -326,6 +326,8 @@ npm run build:codex
 > [!NOTE]
 > arm64 與 x64 是**分開序列建置**的（`build:arm64 && build:x64`）。
 > 兩個架構的 dmg 若併行建置，兩個 `hdiutil resize` 會互搶資源而失敗（`Exit code: 35`）。
+> 所以 `package.json` 的 `mac.target` 只寫 `"dmg"`、**不要**加 `arch` 陣列：寫了 `arch: ["arm64", "x64"]`
+> 的話，`--arm64` / `--x64` 會被忽略，每次都兩個架構一起打，又回到互搶。
 
 建置不做 Apple Developer ID 簽章或公證，一律 ad-hoc 簽章。
 
