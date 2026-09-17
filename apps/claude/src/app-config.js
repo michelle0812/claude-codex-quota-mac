@@ -41,3 +41,38 @@ window.APP_CONFIG = {
     logoutDoneText: "已登出 claude.ai"
   }
 };
+
+// 多帳號：main.js 會把這個 profile 的名稱／主色塞在網址 ?profile=<JSON>。
+// 這段同步執行，renderer-core.js 一開場套主色時就已經是這個帳號的顏色。
+(function applyProfileOverrides(config) {
+  if (typeof location === "undefined") return; // verify-app-config.js 在 vm 裡跑，沒有 location
+  let profile;
+  try {
+    profile = JSON.parse(new URLSearchParams(location.search).get("profile") || "null");
+  } catch {
+    return;
+  }
+  if (!profile || typeof profile !== "object") return;
+
+  const hex = /^#[0-9a-fA-F]{6}$/;
+  const accent = profile.accent;
+  if (accent && ["weekly", "weeklyStrong", "short", "shortStrong"].every((key) => hex.test(String(accent[key])))) {
+    config.accent = { weekly: accent.weekly, weeklyStrong: accent.weeklyStrong, short: accent.short, shortStrong: accent.shortStrong };
+  }
+
+  const name = typeof profile.name === "string" ? profile.name.trim() : "";
+  if (name) {
+    config.brandName = `Claude 額度 · ${name}`;
+    config.copy.zh.brand = `Claude · ${name}`;
+    config.copy.en.brand = `Claude · ${name}`;
+    config.auth.label = `claude.ai 帳號（${name}）`;
+  }
+
+  // 額外帳號只看 claude.ai，沒有本機 statusLine 可以退回。
+  if (profile.extra) {
+    config.copy.zh.authRequired = "尚未登入 claude.ai，請按齒輪 ⚙ 登入";
+    config.copy.en.authRequired = "Not signed in to claude.ai - open settings ⚙ to sign in";
+    config.auth.loggedInText = "已登入：面板顯示這個 claude.ai 帳號的用量";
+    config.auth.loggedOutText = "未登入：按「登入 claude.ai」選擇要看的帳號";
+  }
+})(window.APP_CONFIG);

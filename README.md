@@ -5,7 +5,7 @@
 
 | App | 看什麼 | 資料來源 | 安裝後名稱 |
 |---|---|---|---|
-| **Claude 額度** | Claude Code 用量 | 本機 statusLine hook，或登入 claude.ai 讀帳號級別用量 | `/Applications/Claude 額度.app` |
+| **Claude 額度** | Claude Code 用量，**支援多個 claude.ai 帳號各一個面板** | 本機 statusLine hook，或登入 claude.ai 讀帳號級別用量 | `/Applications/Claude 額度.app` |
 | **Codex 額度** | Codex（ChatGPT 訂閱）用量，**支援多個帳號各一個面板** | 在齒輪裡登入 ChatGPT（或沿用 `codex login` 的 `~/.codex/auth.json`），直接打 OpenAI 用量 API | `/Applications/Codex 額度.app` |
 
 > [!IMPORTANT]
@@ -69,6 +69,7 @@ Codex 額度額外提供：
 Claude 額度額外提供：
 
 - 可選：登入 claude.ai，改讀帳號級別用量（不受哪台機器在跑 Claude Code 影響）
+- 多帳號：每個 claude.ai 帳號一個獨立面板，在各自的齒輪裡登入
 
 ## 畫面
 
@@ -126,6 +127,22 @@ Claude Code ──stdin JSON──▶ usage-statusline.py ──▶ ~/.claude/us
 此來源與哪台機器在跑 Claude Code 無關，適合裝在沒有本機 statusLine 資料的機器上。
 
 **優先序**：登入 claude.ai 後以其為主；未登入或抓取失敗（含 Cloudflare 擋下、登入失效）時自動退回本機 `usage-status.json`。`claude.ai/api/...` 為非公開介面，Anthropic 改版即可能失效。
+
+### 多帳號：一個 claude.ai 帳號一個面板
+
+在 `~/Library/Application Support/claude-quota-mac/profiles.json` 列出帳號，格式與 Codex 額度相同，
+只是**不需要** `codexHome`：
+
+```json
+{ "profiles": [
+  { "id": "default", "name": "主帳號" },
+  { "id": "2", "name": "小號" }
+] }
+```
+
+- 每個面板有自己的資料夾（`claude-quota-mac-<id>`），claude.ai 的登入就存在裡面，所以在各面板的齒輪裡各登各的帳號。
+- **額外帳號只讀 claude.ai**：本機 `usage-status.json` 與方案資訊屬於這台 Claude Code 登入的帳號，只有預設面板會退回讀它。
+- 額外帳號沒指定 `accent` 時，依序套用珊瑚橘、粉紅、靛藍、金黃。其餘行為（自動帶起其他面板、✕ 只關自己）同 Codex 額度。
 
 ## Codex 額度：運作方式
 
@@ -232,6 +249,7 @@ claude-codex-quota-mac/
 │   │   ├── pace-advice.js      ← 使用節奏判斷
 │   │   ├── quota-store.js      ← 快取、歷史、重新整理排程
 │   │   ├── update-check.js     ← 每週檢查 GitHub Releases 新版
+│   │   ├── profile-core.js     ← 多帳號：--profile、profiles.json、per-profile userData、帶起其他面板
 │   │   └── dock-visibility.js、widget-settings.js、compact-layout.js
 │   └── build-scripts/          ← 兩個 app 共用的建置／測試腳本
 │       ├── after-pack-macos.js ← ad-hoc 簽章
@@ -239,7 +257,7 @@ claude-codex-quota-mac/
 │       └── verify-app-config.js
 ├── scripts/sync-shared.js      ← 把 packages/shared/ 複製到各 app 的 src/shared-gen/
 └── apps/
-    ├── claude/                 ← Claude 額度（獨立 package.json / Electron app）
+    ├── claude/                 ← Claude 額度（獨立 package.json / Electron app；profile.js 多帳號）
     │   ├── src/app-config.js   ← 這個 app 的名稱、主色、文案、帳號區塊設定
     │   └── src/main/           ← main.js（薄殼）、preload.js（薄殼）、
     │                              quota-service.js、claude-ai-service.js（各自獨立）

@@ -74,7 +74,8 @@ function main() {
   for (const app of APPS) {
     const distDir = path.join(repoRoot, app.dir, "dist");
     for (const name of fs.readdirSync(distDir)) {
-      if (name.endsWith(".dmg")) {
+      // dist/ 可能還留著上一版的 dmg（electron-builder 不會清），只收這一版的。
+      if (name.endsWith(".dmg") && name.includes(`-${v}-`)) {
         fs.copyFileSync(path.join(distDir, name), path.join(releaseDir, name));
         dmgs.push(name);
       }
