@@ -83,8 +83,15 @@ function normalizeConfig(raw) {
       width: raw.settingsWindowSize?.width || 360,
       height: raw.settingsWindowSize?.height || (raw.auth ? 550 : 500)
     },
-    auth: raw.auth || null
+    auth: raw.auth || null,
+    // 選用：塞進 renderer / settings 視窗網址的 ?profile=<JSON>，讓 app-config.js 在第一行就能讀到
+    // （例如 Codex 多帳號的名稱與主色）。沒給就跟以前一樣不帶 query。
+    rendererQuery: raw.rendererQuery && typeof raw.rendererQuery === "object" ? raw.rendererQuery : null
   };
+}
+
+function htmlLoadOptions() {
+  return config.rendererQuery ? { query: { profile: JSON.stringify(config.rendererQuery) } } : undefined;
 }
 
 // app 端唯一的進入點。
@@ -307,7 +314,7 @@ function createWindow() {
     if (mainWindow === window) mainWindow = null;
   });
 
-  window.loadFile(config.rendererHtmlPath);
+  window.loadFile(config.rendererHtmlPath, htmlLoadOptions());
   return window;
 }
 
@@ -410,7 +417,7 @@ function openSignalSettingsWindow() {
   settingsWindow.on("closed", () => {
     settingsWindow = null;
   });
-  settingsWindow.loadFile(config.settingsHtmlPath);
+  settingsWindow.loadFile(config.settingsHtmlPath, htmlLoadOptions());
   return settingsWindow;
 }
 

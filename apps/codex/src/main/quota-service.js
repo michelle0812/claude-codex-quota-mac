@@ -20,12 +20,24 @@ const TOKEN_REFRESH_SKEW_MS = 5 * 60 * 1000; // 距到期不到 5 分鐘就先 r
 const FIVE_HOUR_WINDOW_MINS = 5 * 60;
 const SEVEN_DAY_WINDOW_MINS = 7 * 24 * 60;
 
-function resolveAuthFilePath() {
-  return process.env.CODEX_AUTH_FILE || DEFAULT_AUTH_FILE;
+// 多帳號時由 main.js 傳入各 profile 的 <CODEX_HOME>/auth.json；沒傳就是單帳號的老路徑。
+function resolveAuthFilePath(authFilePath) {
+  return authFilePath || process.env.CODEX_AUTH_FILE || DEFAULT_AUTH_FILE;
 }
 
-async function readAuthFile() {
-  const filePath = resolveAuthFilePath();
+function displayPath(filePath) {
+  const home = os.homedir();
+  return filePath.startsWith(`${home}${path.sep}`) ? `~${filePath.slice(home.length)}` : filePath;
+}
+
+// 預設帳號叫使用者跑 `codex login`；其他帳號要帶上自己的 CODEX_HOME，不然會登進預設帳號。
+function loginCommand(filePath) {
+  if (filePath === DEFAULT_AUTH_FILE) return "codex login";
+  return `CODEX_HOME=${displayPath(path.dirname(filePath))} codex login`;
+}
+
+async function readAuthFile(authFilePath) {
+  const filePath = resolveAuthFilePath(authFilePath);
   let raw;
   try {
     raw = await fs.readFile(filePath, "utf8");
@@ -33,7 +45,7 @@ async function readAuthFile() {
     if (error?.code === "ENOENT") {
       // renderer 的 friendlyErrorMessage 會把含 "authentication required" 的錯誤換成友善文案。
       throw new Error(
-        "Codex authentication required：找不到 ~/.codex/auth.json，請先安裝並執行 `codex login`。"
+        `Codex authentication required：找不到 ${displayPath(filePath)}，請按齒輪登入 ChatGPT，或執行 \`${loginCommand(filePath)}\`。`
       );
     }
     throw error;
@@ -43,40 +55,44 @@ async function readAuthFile() {
   try {
     parsed = JSON.parse(raw);
   } catch (error) {
-    throw new Error(`~/.codex/auth.json 內容不是有效 JSON：${error.message}`);
+    throw new Error(`${displayPath(filePath)} 內容不是有效 JSON：${error.message}`);
   }
 
   const tokens = parsed?.tokens;
   if (!tokens?.access_token || !tokens?.refresh_token) {
     throw new Error(
-      "Codex authentication required：~/.codex/auth.json 缺少登入 token，請重新執行 `codex login`。"
+      `Codex authentication required：${displayPath(filePath)} 缺少登入 token，請按齒輪重新登入 ChatGPT，或執行 \`${loginCommand(filePath)}\`。`
     );
   }
-  return { parsed, tokens };
+  return { filePath, parsed, tokens };
 }
 
-async function writeAuthFileAtomically(parsed) {
-  const filePath = resolveAuthFilePath();
+async function writeAuthFileAtomically(filePath, parsed) {
   const tempPath = `${filePath}.${process.pid}.tmp`;
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.mkdir(path.dirname(filePath), { recursive: true, mode: 0o700 });
   await fs.writeFile(tempPath, `${JSON.stringify(parsed, null, 2)}\n`, { mode: 0o600 });
   await fs.rename(tempPath, filePath);
 }
 
-// id_token / access_token 是一起發的，用 id_token 的 exp 當「還新不新」的依據即可。
-function decodeJwtExpiryMs(jwt) {
+function decodeJwtPayload(jwt) {
   try {
     const payloadPart = String(jwt).split(".")[1];
     if (!payloadPart) return null;
     const json = Buffer.from(payloadPart.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
-    const exp = JSON.parse(json)?.exp;
-    return Number.isFinite(exp) ? exp * 1000 : null;
+    const payload = JSON.parse(json);
+    return payload && typeof payload === "object" ? payload : null;
   } catch {
     return null;
   }
 }
 
-async function fetchJson(url, options, label) {
+// id_token / access_token 是一起發的，用 id_token 的 exp 當「還新不新」的依據即可。
+function decodeJwtExpiryMs(jwt) {
+  const exp = decodeJwtPayload(jwt)?.exp;
+  return Number.isFinite(exp) ? exp * 1000 : null;
+}
+
+async function fetchJson(url, options, label, filePath) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let response;
@@ -93,7 +109,7 @@ async function fetchJson(url, options, label) {
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) {
       throw new Error(
-        `Codex authentication required：登入已失效（${label} ${response.status}），請重新執行 \`codex login\`。`
+        `Codex authentication required：登入已失效（${label} ${response.status}），請按齒輪重新登入 ChatGPT，或執行 \`${loginCommand(filePath)}\`。`
       );
     }
     throw new Error(`${label}失敗：HTTP ${response.status} ${text.slice(0, 200)}`);
@@ -119,7 +135,8 @@ async function refreshTokens(authData) {
         scope: "openid profile email"
       })
     },
-    "刷新 Codex 登入"
+    "刷新 Codex 登入",
+    authData.filePath
   );
 
   if (!data?.access_token) {
@@ -133,7 +150,7 @@ async function refreshTokens(authData) {
     // OpenAI 每次 refresh 會輪替 refresh_token，一定要寫回。
     refresh_token: data.refresh_token || authData.tokens.refresh_token
   };
-  await writeAuthFileAtomically({
+  await writeAuthFileAtomically(authData.filePath, {
     ...authData.parsed,
     tokens: nextTokens,
     last_refresh: new Date().toISOString()
@@ -141,8 +158,8 @@ async function refreshTokens(authData) {
   return nextTokens;
 }
 
-async function getValidTokens() {
-  const authData = await readAuthFile();
+async function getValidTokens(authFilePath) {
+  const authData = await readAuthFile(authFilePath);
   const expiryMs = decodeJwtExpiryMs(authData.tokens.id_token);
   const needsRefresh = expiryMs === null || expiryMs - Date.now() < TOKEN_REFRESH_SKEW_MS;
   if (!needsRefresh) return authData.tokens;
@@ -158,8 +175,8 @@ async function getValidTokens() {
   }
 }
 
-async function fetchUsage() {
-  const tokens = await getValidTokens();
+async function fetchUsage(authFilePath) {
+  const tokens = await getValidTokens(authFilePath);
   return fetchJson(
     USAGE_URL,
     {
@@ -170,12 +187,15 @@ async function fetchUsage() {
         Accept: "application/json"
       }
     },
-    "讀取 Codex 用量"
+    "讀取 Codex 用量",
+    resolveAuthFilePath(authFilePath)
   );
 }
 
-async function getQuota() {
-  const usage = await fetchUsage();
+// quota-store 會用 readQuota(reason) 呼叫，reason 是字串，所以只認物件形式的 options。
+async function getQuota(options) {
+  const authFilePath = options && typeof options === "object" ? options.authFilePath : undefined;
+  const usage = await fetchUsage(authFilePath);
   const rateLimit = usage?.rate_limit;
   if (!rateLimit || (!rateLimit.primary_window && !rateLimit.secondary_window)) {
     throw new Error("Codex 用量回應缺少 rate_limit 區塊。");
@@ -280,10 +300,16 @@ function clampPercent(value) {
 }
 
 module.exports = {
+  OAUTH_CLIENT_ID,
+  TOKEN_URL,
+  readAuthFile,
+  writeAuthFileAtomically,
+  decodeJwtPayload,
   getQuota,
   normalizeSnapshot,
   prettyPlan,
   whamWindow,
   decodeJwtExpiryMs,
-  resolveAuthFilePath
+  resolveAuthFilePath,
+  loginCommand
 };

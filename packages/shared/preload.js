@@ -10,9 +10,8 @@
 // 縮放、每個按鈕全部沒反應。所以這裡必須自給自足，不要為了「共用」再拆一層。
 // scripts/verify-preload.js 會擋住這種寫法。
 //
-// auth:* 這幾支兩個 app 都會曝露，但只有在 main 行程註冊了 auth 處理器的 app
-// （Claude）才會真的被呼叫；Codex 的 APP_CONFIG.auth 是 null，settings-core
-// 根本不會去碰它們。
+// auth:* 給設定視窗的帳號登入區塊用：Claude 版登入 claude.ai，Codex 版登入 ChatGPT。
+// 只有 main 行程註冊了 auth 處理器、APP_CONFIG.auth 也有設定的 app，settings-core 才會呼叫。
 
 const { contextBridge, ipcRenderer } = require("electron");
 

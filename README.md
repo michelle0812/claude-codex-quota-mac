@@ -6,7 +6,7 @@
 | App | 看什麼 | 資料來源 | 安裝後名稱 |
 |---|---|---|---|
 | **Claude 額度** | Claude Code 用量 | 本機 statusLine hook，或登入 claude.ai 讀帳號級別用量 | `/Applications/Claude 額度.app` |
-| **Codex 額度** | Codex（ChatGPT 訂閱）用量 | `~/.codex/auth.json` 的登入 token 直接打 OpenAI 用量 API | `/Applications/Codex 額度.app` |
+| **Codex 額度** | Codex（ChatGPT 訂閱）用量，**支援多個帳號各一個面板** | 在齒輪裡登入 ChatGPT（或沿用 `codex login` 的 `~/.codex/auth.json`），直接打 OpenAI 用量 API | `/Applications/Codex 額度.app` |
 
 > [!IMPORTANT]
 > **這兩個 App 還沒有 Apple 公證（notarization）**，所以第一次開啟會被 Gatekeeper 擋下來，
@@ -60,6 +60,11 @@
 - 可切換 Dock 圖示是否顯示
 - 視窗置頂
 - **沒有選單列圖示**，所有控制都在 widget 視窗本身
+
+Codex 額度額外提供：
+
+- 多帳號：每個 ChatGPT 帳號一個獨立面板，標題顯示帳號名稱、主色各不相同
+- 在設定（齒輪）裡直接登入／登出 ChatGPT，不用開終端機
 
 Claude 額度額外提供：
 
@@ -124,12 +129,50 @@ Claude Code ──stdin JSON──▶ usage-statusline.py ──▶ ~/.claude/us
 
 ## Codex 額度：運作方式
 
-讀 `~/.codex/auth.json`（Codex CLI 登入後留下的 OAuth token），直接打 OpenAI 的用量 endpoint
+讀帳號的 `auth.json`（ChatGPT OAuth token），直接打 OpenAI 的用量 endpoint
 `https://chatgpt.com/backend-api/wham/usage` 取得 5 小時／7 天用量，不需要安裝任何 hook，
 也不需要 `codex` 指令在 PATH 上。token 過期時會自動用 `refresh_token` 換新並寫回 `auth.json`。
 
-只要這台機器 `codex login` 過就能用。`chatgpt.com/backend-api/...` 與 OAuth client id 皆為
-OpenAI 未公開介面，改版即可能失效；真的失效時重跑一次 `codex login` 即可。
+### 登入：齒輪 → 「登入 ChatGPT」
+
+設定視窗的「ChatGPT 帳號」區塊會開一個 App 內登入視窗，流程與參數同 `codex login`
+（OAuth PKCE，redirect 在 App 內攔下，不佔本機埠）。登入視窗每次都用全新、不落地的 session，
+瀏覽器裡已登入的帳號不會被自動帶入，所以每個面板可以各登各的帳號。
+寫出的 `auth.json` 格式與 `codex login` 相同，Codex CLI 也讀得懂。
+
+- **登出**不刪檔：舊檔改名為 `auth.json.logout-<時間>` 保留，登出錯帳號還救得回來。
+- 預設面板用的是 `~/.codex/auth.json`，**與 Codex CLI 共用**；在預設面板換帳號，終端機的 `codex` 也會跟著換。
+- 仍可用終端機登入：預設帳號 `codex login`，其他帳號 `CODEX_HOME=~/.codex-2 codex login`。
+
+### 多帳號：一個帳號一個面板
+
+在 `~/Library/Application Support/codex-quota-mac/profiles.json` 列出帳號：
+
+```json
+{ "profiles": [
+  { "id": "default", "name": "個人" },
+  { "id": "2", "name": "工作", "codexHome": "~/.codex-2",
+    "accent": { "weekly": "#9B7FD4", "weeklyStrong": "#B59CE6", "short": "#CDB8F2", "shortStrong": "#E3D6FA" } },
+  { "id": "3", "name": "備用", "codexHome": "~/.codex-3" }
+] }
+```
+
+| 欄位 | 說明 |
+|---|---|
+| `id` | `default` 是原本的預設帳號（只取名、可設主色）；其他帳號用英數字、`_`、`-`，最多 32 字 |
+| `name` | 顯示在面板標題「Codex · 名稱」與設定視窗 |
+| `codexHome` | 這個帳號的 `auth.json` 所在目錄（等同 `CODEX_HOME`），預設帳號不用填 |
+| `accent` | 選填，四個 6 碼色碼；不填時額外帳號依序套用內建的青綠、黃綠、紫、橘 |
+
+運作方式：
+
+- 打開 App（預設帳號）時，會自動把 `profiles.json` 裡的其他帳號各開一份（`open -n -a … --args --profile=<id>`）。
+- 每個帳號是獨立行程，資料夾是 `codex-quota-mac-<id>`，各自記視窗位置、設定與用量歷史；
+  同一個帳號重複開會被擋下，不會多出第二份。
+- 各面板的紅色 ✕ 只關自己那一份。改了 `profiles.json` 後，重開對應面板即生效。
+
+`chatgpt.com/backend-api/...`、`auth.openai.com` 登入流程與 OAuth client id 皆為
+OpenAI 未公開介面，改版即可能失效；失效時在齒輪裡重新登入即可。
 
 ---
 
@@ -137,7 +180,7 @@ OpenAI 未公開介面，改版即可能失效；真的失效時重跑一次 `co
 
 - macOS
 - Claude 額度：已安裝並登入 Claude Code，且 `python3` 可用（系統內建即可）；或改用 claude.ai 登入
-- Codex 額度：這台機器用 Codex CLI 登入過 ChatGPT（跑過 `codex login`，`~/.codex/auth.json` 存在即可；不需要 `codex` 還在 PATH 上）
+- Codex 額度：ChatGPT 訂閱帳號；在齒輪裡登入即可，不需要安裝 Codex CLI
 - Node.js 與 npm（僅本機開發或自行建置時需要）
 
 ## 基本操作
@@ -181,13 +224,14 @@ claude-codex-quota-mac/
 ├── packages/
 │   ├── shared/                 ← 共用程式碼的唯一版本（會被複製到各 app）
 │   │   ├── main-core.js        ← 主行程核心：視窗、IPC、設定儲存
-│   │   ├── preload-core.js     ← contextBridge 橋接（window.quotaBridge）
+│   │   ├── preload.js          ← contextBridge 橋接（window.quotaBridge），只能 require electron
 │   │   ├── renderer-core.js    ← HUD／細條的全部畫面邏輯
 │   │   ├── settings-core.js    ← 設定視窗邏輯
 │   │   ├── renderer.html / settings.html
 │   │   ├── styles.css / settings.css
 │   │   ├── pace-advice.js      ← 使用節奏判斷
 │   │   ├── quota-store.js      ← 快取、歷史、重新整理排程
+│   │   ├── update-check.js     ← 每週檢查 GitHub Releases 新版
 │   │   └── dock-visibility.js、widget-settings.js、compact-layout.js
 │   └── build-scripts/          ← 兩個 app 共用的建置／測試腳本
 │       ├── after-pack-macos.js ← ad-hoc 簽章
@@ -199,7 +243,7 @@ claude-codex-quota-mac/
     │   ├── src/app-config.js   ← 這個 app 的名稱、主色、文案、帳號區塊設定
     │   └── src/main/           ← main.js（薄殼）、preload.js（薄殼）、
     │                              quota-service.js、claude-ai-service.js（各自獨立）
-    └── codex/                  ← Codex 額度（結構相同，沒有 claude-ai-service.js）
+    └── codex/                  ← Codex 額度（結構相同，另有 profile.js 多帳號、codex-auth-service.js 齒輪內登入）
 ```
 
 ### 共用模組怎麼運作
@@ -272,7 +316,7 @@ npm run build:codex
 - Claude 版本機來源的新鮮度取決於 statusLine 多久刷新一次；若超過 20 分鐘沒有新的 session 活動，widget 會顯示「資料過期」提示。
 - `used_percentage` 與 `resets_at` 由 Claude Code / OpenAI 用量 API 提供，widget 不另行推算絕對 token 數。
 - claude.ai 資料來源使用非公開的 `claude.ai/api/organizations/<org>/usage`，Anthropic 改版或 Cloudflare 政策調整都可能使其失效；失效時會自動退回本機來源並提示重新登入。
-- Codex 版使用非公開的 `chatgpt.com/backend-api/wham/usage` 與 Codex CLI 的 OAuth client id，OpenAI 改版即可能失效；失效時重跑 `codex login` 即可。
+- Codex 版使用非公開的 `chatgpt.com/backend-api/wham/usage` 與 Codex CLI 的 OAuth client id，OpenAI 改版即可能失效；失效時在齒輪裡重新登入即可。
 - 僅支援 macOS，已移除 Windows 11 的建置與發行支援。需要 Windows 版請前往 [stupdada/codex-quota-widget](https://github.com/stupdada/codex-quota-widget)。
 
 ## 專案來源與致謝
