@@ -57,7 +57,7 @@
 - 緊湊 HUD 與頂端吸附細條顯示
 - 使用節奏建議與近期速度提醒
 - 可調整提醒動畫與用量重新整理間隔（1–30 分鐘）
-- 可切換 Dock 圖示是否顯示
+- 不佔 Dock：不顯示 Dock 圖示
 - 視窗置頂
 - **沒有選單列圖示**，所有控制都在 widget 視窗本身
 
@@ -205,8 +205,8 @@ OpenAI 未公開介面，改版即可能失效；失效時在齒輪裡重新登�
 - 標題列按鈕：語言、緊湊／展開、置頂、重新整理、**設定（齒輪）**、隱藏、退出。
 - 緊湊 HUD：滑鼠移上去展開控制列。
 - 將 HUD 拖到螢幕頂端，可切換為頂端細條模式。
-- **隱藏**後，點 Dock 圖示即可重新叫出視窗；**退出（紅色 ✕）**才是真正關閉程式。
-- 「設定」視窗可調整提醒動畫、用量重新整理間隔（1–30 分鐘）與 Dock 圖示顯示；Claude 版另可登入／登出 claude.ai 切換資料來源。按「儲存」後會自動關閉設定視窗。
+- **隱藏**後，從 Finder／Spotlight／Launchpad **再打開一次 App** 即可叫回視窗（多帳號時所有面板一起叫回）；**退出（紅色 ✕）**才是真正關閉程式。
+- 「設定」視窗可調整提醒動畫、用量重新整理間隔（1–30 分鐘）與自動檢查更新；Claude 版另可登入／登出 claude.ai 切換資料來源。按「儲存」後會自動關閉設定視窗。
 
 ---
 
@@ -250,7 +250,7 @@ claude-codex-quota-mac/
 │   │   ├── quota-store.js      ← 快取、歷史、重新整理排程
 │   │   ├── update-check.js     ← 每週檢查 GitHub Releases 新版
 │   │   ├── profile-core.js     ← 多帳號：--profile、profiles.json、per-profile userData、帶起其他面板
-│   │   └── dock-visibility.js、widget-settings.js、compact-layout.js
+│   │   └── widget-settings.js、compact-layout.js
 │   └── build-scripts/          ← 兩個 app 共用的建置／測試腳本
 │       ├── after-pack-macos.js ← ad-hoc 簽章
 │       ├── verify-widget-settings.js

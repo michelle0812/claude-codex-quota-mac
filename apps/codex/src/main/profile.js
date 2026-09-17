@@ -42,6 +42,10 @@ function launchExtraProfiles(app, defaultUserDataPath) {
   core.launchExtraProfiles(app, defaultUserDataPath, { validateEntry });
 }
 
+function reopenHooks(app, profile, defaultUserDataPath) {
+  return core.reopenHooks(app, { isDefault: profile.id === core.DEFAULT_PROFILE_ID }, defaultUserDataPath, { validateEntry });
+}
+
 module.exports = {
   DEFAULT_PROFILE_ID: core.DEFAULT_PROFILE_ID,
   EXTRA_PROFILE_PALETTE,
@@ -50,5 +54,6 @@ module.exports = {
   profilesFilePath: core.profilesFilePath,
   resolveProfile,
   listExtraProfileIds,
-  launchExtraProfiles
+  launchExtraProfiles,
+  reopenHooks
 };

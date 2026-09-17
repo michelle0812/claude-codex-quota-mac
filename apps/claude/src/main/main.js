@@ -11,7 +11,7 @@ const { app } = require("electron");
 const { startQuotaWidget } = require("../shared-gen/main-core");
 const { getQuota: getLocalQuota } = require("./quota-service");
 const claudeAiService = require("./claude-ai-service");
-const { DEFAULT_PROFILE_ID, resolveProfile, launchExtraProfiles } = require("./profile");
+const { DEFAULT_PROFILE_ID, resolveProfile, launchExtraProfiles, reopenHooks } = require("./profile");
 
 const defaultUserDataPath = app.getPath("userData");
 
@@ -63,6 +63,8 @@ startQuotaWidget({
   rendererQuery: profile.name || profile.accent || !isDefaultProfile
     ? { name: profile.name, accent: profile.accent, extra: !isDefaultProfile }
     : undefined,
+  // 沒有 Dock 圖示：使用者再打開 App 時，不管 macOS 通知到哪一份，所有帳號的面板都叫回來。
+  ...reopenHooks(app, profile, defaultUserDataPath),
   auth: {
     configure: (userDataPath) => claudeAiService.configure(userDataPath),
     hasSession: () => claudeAiService.hasSession(),
@@ -72,5 +74,9 @@ startQuotaWidget({
 });
 
 if (isDefaultProfile) {
-  app.whenReady().then(() => launchExtraProfiles(app, defaultUserDataPath));
+  // 拿不到 single-instance lock 的那份（App 已經在跑）會自己結束，不要再往外帶起面板；
+  // 叫回其他面板交給已經在跑的那份的 onSecondInstance。
+  app.whenReady().then(() => {
+    if (app.hasSingleInstanceLock()) launchExtraProfiles(app, defaultUserDataPath);
+  });
 }

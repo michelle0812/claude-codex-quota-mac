@@ -1,37 +1,30 @@
 const assert = require("node:assert/strict");
-const { applyDockVisibility } = require("../shared/dock-visibility");
+const fs = require("node:fs");
+const path = require("node:path");
 const { DEFAULT_WIDGET_SETTINGS, normalizeWidgetSettings } = require("../shared/widget-settings");
 
 const defaults = normalizeWidgetSettings();
 assert.deepEqual(defaults, DEFAULT_WIDGET_SETTINGS);
-assert.equal(defaults.showInDock, true);
-
-const hidden = normalizeWidgetSettings({ ...DEFAULT_WIDGET_SETTINGS, showInDock: false });
-assert.equal(hidden.showInDock, false);
-
-const shown = normalizeWidgetSettings({ ...DEFAULT_WIDGET_SETTINGS, showInDock: true });
-assert.equal(shown.showInDock, true);
 
 const migrated = normalizeWidgetSettings({
   recentFastBreathMs: 6000,
   criticalBlinkMs: 5000,
   quotaRefreshMs: 10 * 60 * 1000
 });
-assert.equal(migrated.showInDock, true);
 assert.equal(migrated.autoUpdateCheck, true);
 assert.equal(normalizeWidgetSettings({ autoUpdateCheck: false }).autoUpdateCheck, false);
 
-const dockCalls = [];
-const dock = {
-  show() {
-    dockCalls.push("show");
-  },
-  hide() {
-    dockCalls.push("hide");
-  }
-};
-applyDockVisibility(dock, false);
-applyDockVisibility(dock, true);
-assert.deepEqual(dockCalls, ["hide", "show"]);
+// Dock 圖示開關已移除（一律不顯示）：舊設定檔裡的 showInDock 要被丟掉，不能再被讀回來。
+assert.equal("showInDock" in DEFAULT_WIDGET_SETTINGS, false);
+assert.equal("showInDock" in normalizeWidgetSettings({ showInDock: true, autoUpdateCheck: true }), false);
 
-console.log("Verified Dock visibility defaults, hide/show actions, and migration from existing settings.");
+// 設定視窗不能再有 Dock 開關；兩個 app 打包後都要用 LSUIElement 從一開始就不出現在 Dock。
+const repoRoot = path.resolve(__dirname, "..", "..");
+const settingsHtml = fs.readFileSync(path.join(repoRoot, "packages", "shared", "settings.html"), "utf8");
+assert.equal(/showInDock|Dock/.test(settingsHtml), false, "settings.html 不應再提到 Dock");
+for (const appName of ["claude", "codex"]) {
+  const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, "apps", appName, "package.json"), "utf8"));
+  assert.equal(pkg.build?.mac?.extendInfo?.LSUIElement, true, `${appName}: build.mac.extendInfo.LSUIElement 必須是 true`);
+}
+
+console.log("Verified widget settings defaults/migration, Dock toggle removed, and LSUIElement set for every app.");

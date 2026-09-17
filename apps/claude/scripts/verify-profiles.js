@@ -6,7 +6,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const vm = require("node:vm");
-const { DEFAULT_PROFILE_ID, EXTRA_PROFILE_PALETTE, resolveProfile, listExtraProfileIds } = require("../src/main/profile");
+const { DEFAULT_PROFILE_ID, EXTRA_PROFILE_PALETTE, resolveProfile, listExtraProfileIds, reopenHooks } = require("../src/main/profile");
 
 const ACCENT_KEYS = ["weekly", "weeklyStrong", "short", "shortStrong"];
 const repoApps = path.resolve(__dirname, "..", "..");
@@ -88,7 +88,20 @@ function verifyAppConfigOverride() {
   assert.match(plain.copy.zh.authRequired, /statusLine/);
 }
 
+// 沒有 Dock 圖示時靠「再打開 App」叫回面板。macOS 只通知多開中的某一份，所以每份都要有 onReopen；
+// 但額外帳號被叫起來（second-instance）時絕不能再往外叫，否則 default ↔ 額外帳號會無限互叫。
+function verifyReopenHooks() {
+  const fakeApp = { isPackaged: true, getPath: () => "/nonexistent" };
+  const main = reopenHooks(fakeApp, { isDefault: true }, "/tmp/none");
+  assert.equal(typeof main.onReopen, "function");
+  assert.equal(typeof main.onSecondInstance, "function");
+  const extra = reopenHooks(fakeApp, { isDefault: false }, "/tmp/none");
+  assert.equal(typeof extra.onReopen, "function");
+  assert.equal(extra.onSecondInstance, undefined, "額外帳號的 second-instance 不能再叫別人（會無限循環）");
+}
+
 verifyResolve();
+verifyReopenHooks();
 verifyPalette();
 verifyAppConfigOverride();
 
