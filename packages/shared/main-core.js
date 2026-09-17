@@ -10,7 +10,6 @@
 const { app, BrowserWindow, ipcMain, screen, shell, Notification } = require("electron");
 const fs = require("node:fs/promises");
 const path = require("node:path");
-const { applyDockVisibility } = require("./dock-visibility");
 const { QuotaStore } = require("./quota-store");
 const { DEFAULT_WIDGET_SETTINGS, normalizeWidgetSettings } = require("./widget-settings");
 const { COMPACT_LAYOUT } = require("./compact-layout");
@@ -84,6 +83,12 @@ function normalizeConfig(raw) {
       height: raw.settingsWindowSize?.height || (raw.auth ? 550 : 500)
     },
     auth: raw.auth || null,
+    // 選用，多帳號用。兩種「叫回視窗」要分開，否則面板互叫會無限循環：
+    //   onReopen：macOS 送來 activate（使用者從 Finder / Spotlight / `open -a` 再打開 App）。
+    //             同一個 App 多開時 macOS 只會通知其中「一份」，所以每一份都要能把全部面板叫回來。
+    //   onSecondInstance：有人用同一個 userData 再啟動一次（其他面板或 `open -n` 帶起來的）。
+    onReopen: typeof raw.onReopen === "function" ? raw.onReopen : null,
+    onSecondInstance: typeof raw.onSecondInstance === "function" ? raw.onSecondInstance : null,
     // 選用：塞進 renderer / settings 視窗網址的 ?profile=<JSON>，讓 app-config.js 在第一行就能讀到
     // （例如 Codex 多帳號的名稱與主色）。沒給就跟以前一樣不帶 query。
     rendererQuery: raw.rendererQuery && typeof raw.rendererQuery === "object" ? raw.rendererQuery : null
@@ -104,7 +109,7 @@ function startQuotaWidget(rawConfig) {
     return;
   }
 
-  app.on("second-instance", showWindow);
+  app.on("second-instance", () => showWindowThen(config.onSecondInstance, "onSecondInstance"));
   app.whenReady().then(startApp);
 
   app.on("before-quit", () => {
@@ -151,7 +156,9 @@ function compactMinimumSize(topStrip = isCompactTopStrip) {
 
 async function startApp() {
   signalSettings = await loadSignalSettings();
-  updateDockVisibility(signalSettings.showInDock);
+  // 一律不在 Dock 顯示。打包版靠 Info.plist 的 LSUIElement 一開始就不出現；
+  // 這裡再 hide 一次給 `npm start`（Electron.app 沒有 LSUIElement）用。
+  app.dock?.hide();
   await config.auth?.configure?.(app.getPath("userData"));
   quotaStore = new QuotaStore({
     userDataPath: app.getPath("userData"),
@@ -167,7 +174,9 @@ async function startApp() {
 
   applyAutoUpdatePreference(signalSettings.autoUpdateCheck);
 
-  app.on("activate", showWindow);
+  // 沒有 Dock 圖示也沒有選單列圖示：App 已經在跑時再從 Finder / Spotlight 打開，
+  // macOS 送的是 activate（reopen），就用它把視窗叫回來。
+  app.on("activate", () => showWindowThen(config.onReopen, "onReopen"));
 }
 
 // ---- 更新檢查 ----
@@ -547,7 +556,6 @@ async function setSignalSettings(settings) {
   const previous = signalSettings;
   signalSettings = normalizeWidgetSettings(settings);
   quotaStore?.setVisibleRefreshIntervalMs(signalSettings.quotaRefreshMs);
-  updateDockVisibility(signalSettings.showInDock);
   if (signalSettings.autoUpdateCheck !== previous?.autoUpdateCheck) {
     applyAutoUpdatePreference(signalSettings.autoUpdateCheck);
   }
@@ -555,12 +563,6 @@ async function setSignalSettings(settings) {
   sendToWindow("signal:settingsChanged", signalSettings);
   sendToSettingsWindow("signal:settingsChanged", signalSettings);
   return signalSettings;
-}
-
-function updateDockVisibility(showInDock) {
-  applyDockVisibility(app.dock, showInDock, (error) => {
-    console.warn(`Failed to update Dock visibility: ${error.message}`);
-  });
 }
 
 async function saveSignalSettings() {
@@ -781,6 +783,15 @@ function snapCompactPosition(x, y, width, height) {
 
 function clampWindowX(x, width, workArea) {
   return Math.min(workArea.x + workArea.width - width, Math.max(workArea.x, Math.round(x)));
+}
+
+function showWindowThen(hook, label) {
+  showWindow();
+  try {
+    hook?.();
+  } catch (error) {
+    console.warn(`${label} 失敗：${error.message}`);
+  }
 }
 
 function showWindow() {

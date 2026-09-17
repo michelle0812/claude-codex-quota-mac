@@ -157,23 +157,48 @@ function rendererQueryFor(profile) {
   return profile.name || profile.accent ? { name: profile.name, accent: profile.accent } : undefined;
 }
 
-// 在 default 行程裡呼叫：把其他帳號各開一份。已經在跑的會被對方的 single-instance lock 擋掉。
+// 再啟動一份同一個 App。目標 profile 已經在跑時，新的那份拿不到 single-instance lock 會自己結束，
+// 並讓對方收到 second-instance（→ 叫回視窗）；沒在跑就真的開起來。
+function spawnSelf(app, args) {
+  if (app.isPackaged) {
+    // .../X.app/Contents/MacOS/X → .../X.app
+    const bundlePath = path.resolve(app.getPath("exe"), "..", "..", "..");
+    spawn("/usr/bin/open", ["-n", "-a", bundlePath, "--args", ...args], { detached: true, stdio: "ignore" }).unref();
+  } else {
+    // npm start：直接用同一顆 electron 再開一份。
+    spawn(process.execPath, [app.getAppPath(), ...args], { detached: true, stdio: "ignore" }).unref();
+  }
+}
+
+// 在 default 行程裡呼叫：把其他帳號各開一份（或叫回已經在跑的）。
 function launchExtraProfiles(app, defaultUserDataPath, { validateEntry } = {}) {
   for (const id of listExtraProfileIds(defaultUserDataPath, { validateEntry })) {
     try {
-      const args = [`--profile=${id}`];
-      if (app.isPackaged) {
-        // .../X.app/Contents/MacOS/X → .../X.app
-        const bundlePath = path.resolve(app.getPath("exe"), "..", "..", "..");
-        spawn("/usr/bin/open", ["-n", "-a", bundlePath, "--args", ...args], { detached: true, stdio: "ignore" }).unref();
-      } else {
-        // npm start：直接用同一顆 electron 再開一份。
-        spawn(process.execPath, [app.getAppPath(), ...args], { detached: true, stdio: "ignore" }).unref();
-      }
+      spawnSelf(app, [`--profile=${id}`]);
     } catch (error) {
       console.warn(`帶起 profile ${id} 失敗：${error.message}`);
     }
   }
+}
+
+// 在額外帳號行程裡呼叫：叫 default 出來，由它再把所有帳號的面板叫回來。
+function launchDefaultProfile(app) {
+  try {
+    spawnSelf(app, []);
+  } catch (error) {
+    console.warn(`叫回預設面板失敗：${error.message}`);
+  }
+}
+
+// main.js 直接展開進 startQuotaWidget 的 config：
+//   default：被叫起來或使用者再打開 App → 叫回其他帳號
+//   額外帳號：使用者再打開 App（macOS 剛好通知到這份）→ 叫 default；被叫起來 → 只顯示自己，不再往外叫
+function reopenHooks(app, profile, defaultUserDataPath, { validateEntry } = {}) {
+  if (profile.isDefault) {
+    const launchExtras = () => launchExtraProfiles(app, defaultUserDataPath, { validateEntry });
+    return { onReopen: launchExtras, onSecondInstance: launchExtras };
+  }
+  return { onReopen: () => launchDefaultProfile(app), onSecondInstance: undefined };
 }
 
 module.exports = {
@@ -186,5 +211,7 @@ module.exports = {
   listExtraProfileIds,
   profilesFilePath,
   rendererQueryFor,
-  launchExtraProfiles
+  launchExtraProfiles,
+  launchDefaultProfile,
+  reopenHooks
 };

@@ -28,5 +28,6 @@ module.exports = {
   EXTRA_PROFILE_PALETTE,
   resolveProfile,
   listExtraProfileIds: core.listExtraProfileIds,
-  launchExtraProfiles: core.launchExtraProfiles
+  launchExtraProfiles: core.launchExtraProfiles,
+  reopenHooks: core.reopenHooks
 };
