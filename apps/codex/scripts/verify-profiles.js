@@ -78,6 +78,17 @@ function verifyMissingOrBrokenFile() {
   });
 }
 
+// default 寫了 codexHome 就跟 CLI 的 ~/.codex 脫鉤，跟其他帳號一樣讀自己的 auth.json。
+function verifyDefaultCodexHome() {
+  const json = JSON.stringify({ profiles: [{ id: "default", name: "個人", codexHome: "~/.codex-1" }] });
+  withUserData(json, (dir) => {
+    const main = resolveProfile([], dir);
+    assert.equal(main.name, "個人");
+    assert.equal(main.authFilePath, path.join(os.homedir(), ".codex-1", "auth.json"));
+    assert.deepEqual(listExtraProfileIds(dir), []);
+  });
+}
+
 function verifyProfilesFile() {
   const json = JSON.stringify({
     profiles: [
@@ -158,6 +169,7 @@ verifyParseProfileArg();
 verifyExpandHome();
 verifyMissingOrBrokenFile();
 verifyProfilesFile();
+verifyDefaultCodexHome();
 verifyPaletteUniqueness();
 verifyAppConfigOverride();
 

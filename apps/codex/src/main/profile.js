@@ -3,6 +3,7 @@
 // Codex 版的多帳號設定。共用邏輯（argv、profiles.json、userData、帶起其他面板）在
 // shared-gen/profile-core.js；這裡只加 Codex 自己的部分：
 //   - 額外帳號必須有 codexHome（該帳號 auth.json 所在目錄，等同 CODEX_HOME）
+//   - default 的 codexHome 可有可無：有寫就跟 CLI 的 ~/.codex 脫鉤，沒寫才走舊路徑
 //   - 額外帳號的預設調色盤
 // 登入用齒輪裡的「登入 ChatGPT」，或 `CODEX_HOME=~/.codex-2 codex login`。
 
@@ -24,12 +25,13 @@ function validateEntry(entry) {
 
 function resolveProfile(argv, defaultUserDataPath) {
   const profile = core.resolveProfile(argv, defaultUserDataPath, { palette: EXTRA_PROFILE_PALETTE, validateEntry });
+  const codexHome = core.expandHome(profile.entry.codexHome);
   return {
     id: profile.id,
     name: profile.name,
     userDataPath: profile.userDataPath,
-    // null = quota-service 走原本的 CODEX_AUTH_FILE / ~/.codex/auth.json
-    authFilePath: profile.isDefault ? null : path.join(core.expandHome(profile.entry.codexHome), "auth.json"),
+    // null = default 沒寫 codexHome，quota-service 走原本的 CODEX_AUTH_FILE / ~/.codex/auth.json
+    authFilePath: codexHome ? path.join(codexHome, "auth.json") : null,
     accent: profile.accent
   };
 }
