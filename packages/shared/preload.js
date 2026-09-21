@@ -42,12 +42,26 @@ contextBridge.exposeInMainWorld("quotaBridge", {
   getAuthStatus: () => ipcRenderer.invoke("auth:status"),
   login: () => ipcRenderer.invoke("auth:login"),
   logout: () => ipcRenderer.invoke("auth:logout"),
+  // 「＋」的命名視窗（panel-name.html）專用。其他視窗用不到這一區。
+  panelName: {
+    ready: () => ipcRenderer.send("panelName:ready"),
+    submit: (name) => ipcRenderer.send("panelName:submit", name),
+    onShow: (callback) => {
+      ipcRenderer.on("panelName:show", (_event, value) => callback(value));
+    }
+  },
+  getPanelState: () => ipcRenderer.invoke("panel:state"),
+  addPanel: () => ipcRenderer.invoke("panel:add"),
+  removePanel: () => ipcRenderer.invoke("panel:remove"),
   getAppVersion: () => ipcRenderer.invoke("app:version"),
   checkForUpdate: () => ipcRenderer.invoke("update:check"),
   getUpdateState: () => ipcRenderer.invoke("update:state"),
   openReleasePage: () => ipcRenderer.invoke("update:openRelease"),
   onUpdateStateChanged: (callback) => {
     ipcRenderer.on("update:stateChanged", (_event, value) => callback(value));
+  },
+  onPanelStateChanged: (callback) => {
+    ipcRenderer.on("panel:stateChanged", (_event, value) => callback(value));
   },
   onQuotaChanged: (callback) => {
     ipcRenderer.on("quota:changed", (_event, value) => callback(value));

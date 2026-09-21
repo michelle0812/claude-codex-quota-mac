@@ -7,6 +7,8 @@
 //   - 額外帳號的預設調色盤
 // 登入用齒輪裡的「登入 ChatGPT」，或 `CODEX_HOME=~/.codex-2 codex login`。
 
+const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const core = require("../shared-gen/profile-core");
 
@@ -36,6 +38,38 @@ function resolveProfile(argv, defaultUserDataPath) {
   };
 }
 
+// 面板上的 ＋／－。Codex 的每個帳號要有自己的 CODEX_HOME，新面板預設收在
+// ~/.codex/<id>（不是在家目錄旁邊長 ~/.codex-2、~/.codex-3）。
+// 目錄一開始是空的，使用者在齒輪裡登入 ChatGPT 之後才會寫出 auth.json。
+function defaultCodexHomeFor(id) {
+  return path.join(os.homedir(), ".codex", id);
+}
+
+// 「－」刪掉這個帳號的 codexHome。
+//
+// 安全閘：只刪「正好是我們自己發出去的那個路徑」（~/.codex/<id>）。
+// 使用者要是手動把 codexHome 改指到別處（例如 ~/.codex 本身、或某個共用目錄），
+// 一律不刪，只把這筆從 profiles.json 移掉 —— 寧可留垃圾，也不能誤刪主帳號憑證。
+function cleanupEntry(entry, id) {
+  const home = core.expandHome(entry?.codexHome);
+  if (!home) return;
+  const expected = defaultCodexHomeFor(id);
+  if (path.resolve(home) !== path.resolve(expected)) {
+    console.warn(`面板 ${id} 的 codexHome 不是 ${expected}，不刪除：${home}`);
+    return;
+  }
+  fs.rmSync(home, { recursive: true, force: true });
+}
+
+function panelHooks(app, profile, defaultUserDataPath, { dialog, getWindow } = {}) {
+  return core.panelHooks(app, profile, defaultUserDataPath, {
+    validateEntry,
+    buildEntry: (id) => ({ codexHome: defaultCodexHomeFor(id) }),
+    confirmRemove: dialog ? (p) => core.confirmRemovePanel(dialog, getWindow?.(), p) : undefined,
+    cleanupEntry
+  });
+}
+
 function listExtraProfileIds(defaultUserDataPath) {
   return core.listExtraProfileIds(defaultUserDataPath, { validateEntry });
 }
@@ -57,5 +91,6 @@ module.exports = {
   resolveProfile,
   listExtraProfileIds,
   launchExtraProfiles,
-  reopenHooks
+  reopenHooks,
+  panelHooks
 };

@@ -1,7 +1,7 @@
 // Claude 版的專屬設定：renderer-core.js 與 settings-core.js 都吃這一份。
 // 共用邏輯全部在 src/shared-gen/（來源是 packages/shared/）。
 window.APP_CONFIG = {
-  brandName: "Claude 額度",
+  brandName: "Claude 主帳號",
   compactThemeStorageKey: "claudeUsageCompactTheme",
   emptyErrorCopyKey: "authRequired",
 
@@ -15,13 +15,13 @@ window.APP_CONFIG = {
 
   copy: {
     zh: {
-      brand: "Claude 用量",
+      brand: "Claude 主帳號",
       statusLoading: "正在讀取 Claude 用量...",
       statusError: "無法讀取 Claude 用量",
       authRequired: "尚未偵測到 Claude Code 用量資料，請確認 statusLine hook 已安裝並跑過一次"
     },
     en: {
-      brand: "Claude Usage",
+      brand: "Claude Main Account",
       statusLoading: "Reading Claude usage...",
       statusError: "Unable to read Claude usage",
       authRequired: "Claude Code usage data not found - check the statusLine hook is installed"
@@ -62,7 +62,7 @@ window.APP_CONFIG = {
 
   const name = typeof profile.name === "string" ? profile.name.trim() : "";
   if (name) {
-    config.brandName = `Claude 額度 · ${name}`;
+    config.brandName = `Claude · ${name}`;
     config.copy.zh.brand = `Claude · ${name}`;
     config.copy.en.brand = `Claude · ${name}`;
     config.auth.label = `claude.ai 帳號（${name}）`;

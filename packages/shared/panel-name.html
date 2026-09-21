@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'self'" />
+    <title>面板名稱</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 18px 20px 16px;
+        background: #111418;
+        color: #eef7f1;
+        font-family: -apple-system, "PingFang TC", "Helvetica Neue", sans-serif;
+        font-size: 13px;
+        user-select: none;
+      }
+
+      h1 {
+        margin: 0 0 4px;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      p {
+        margin: 0 0 12px;
+        color: rgba(238, 247, 241, 0.6);
+        font-size: 11.5px;
+        line-height: 1.5;
+      }
+
+      input {
+        width: 100%;
+        padding: 8px 10px;
+        border: 1px solid rgba(238, 247, 241, 0.2);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.05);
+        color: #eef7f1;
+        font-size: 13px;
+        font-family: inherit;
+        user-select: text;
+      }
+
+      input:focus {
+        outline: none;
+        border-color: rgba(120, 190, 255, 0.7);
+      }
+
+      .hint {
+        margin: 6px 2px 0;
+        min-height: 14px;
+        color: rgba(238, 247, 241, 0.42);
+        font-size: 10.5px;
+      }
+
+      .actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      button {
+        min-width: 74px;
+        padding: 7px 12px;
+        border: 1px solid rgba(238, 247, 241, 0.2);
+        border-radius: 8px;
+        background: transparent;
+        color: #eef7f1;
+        font-size: 12px;
+        font-family: inherit;
+        cursor: pointer;
+      }
+
+      button:hover {
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      button.primary {
+        border-color: rgba(120, 190, 255, 0.65);
+        background: rgba(120, 190, 255, 0.18);
+        font-weight: 600;
+      }
+
+      button.primary:hover {
+        background: rgba(120, 190, 255, 0.28);
+      }
+    </style>
+  </head>
+  <body>
+    <h1 id="title">新面板的名稱</h1>
+    <p id="subtitle">取個看得懂的名字，之後面板標題會顯示它。</p>
+    <input id="nameInput" type="text" maxlength="24" autocomplete="off" spellcheck="false" />
+    <div class="hint" id="hint"></div>
+    <div class="actions">
+      <button id="cancelBtn" type="button">取消</button>
+      <button id="okBtn" class="primary" type="button">建立面板</button>
+    </div>
+    <script src="./panel-name.js"></script>
+  </body>
+</html>

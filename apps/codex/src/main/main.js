@@ -8,11 +8,11 @@
 // profiles.json 裡的其他帳號各帶起一份；已經在跑的會被 single-instance lock 擋掉。
 
 const path = require("node:path");
-const { app } = require("electron");
+const { app, dialog, BrowserWindow } = require("electron");
 const { startQuotaWidget } = require("../shared-gen/main-core");
 const { getQuota, resolveAuthFilePath } = require("./quota-service");
 const { createCodexAuth } = require("./codex-auth-service");
-const { DEFAULT_PROFILE_ID, resolveProfile, launchExtraProfiles, reopenHooks } = require("./profile");
+const { DEFAULT_PROFILE_ID, resolveProfile, launchExtraProfiles, reopenHooks, panelHooks } = require("./profile");
 
 const defaultUserDataPath = app.getPath("userData");
 
@@ -47,7 +47,12 @@ startQuotaWidget({
   rendererQuery,
   auth: codexAuth,
   // 沒有 Dock 圖示：使用者再打開 App 時，不管 macOS 通知到哪一份，所有帳號的面板都叫回來。
-  ...reopenHooks(app, profile, defaultUserDataPath)
+  ...reopenHooks(app, profile, defaultUserDataPath),
+  // 標題列的 ＋／－：新增／移除面板。
+  panels: panelHooks(app, { ...profile, isDefault: profile.id === DEFAULT_PROFILE_ID }, defaultUserDataPath, {
+    dialog,
+    getWindow: () => BrowserWindow.getAllWindows()[0] || null
+  })
 });
 
 if (profile.id === DEFAULT_PROFILE_ID) {

@@ -40,6 +40,8 @@ function hexToRgbTriplet(hex) {
 const state = {
   lang: "zh",
   quota: null,
+  // 面板 ＋／－ 的狀態（哪一個面板、還能不能加/減），由 main 行程推過來。
+  panel: null,
   error: null,
   compact: true,
   compactDisplayMode: "hud",
@@ -93,6 +95,8 @@ const els = {
   compactBtn: requiredElement("compactBtn"),
   pinBtn: requiredElement("pinBtn"),
   refreshBtn: requiredElement("refreshBtn"),
+  panelAddBtn: requiredElement("panelAddBtn"),
+  panelRemoveBtn: requiredElement("panelRemoveBtn"),
   settingsBtn: requiredElement("settingsBtn"),
   minimizeBtn: requiredElement("minimizeBtn"),
   closeBtn: requiredElement("closeBtn"),
@@ -218,6 +222,11 @@ const copy = {
     plan: "方案",
     unknown: "未知",
     refresh: "重新整理",
+    panelAdd: "新增一個面板：多一個帳號的額度視窗",
+    panelAddMax: "面板數量已達上限",
+    panelRemove: "移除這個面板：登入資料會一併清空",
+    panelRemoveMain: "主面板不能移除（至少要留一個）",
+    panelActionFailed: "面板操作失敗",
     hide: "隱藏",
     settings: "設定",
     hideToTray: "隱藏",
@@ -284,6 +293,11 @@ const copy = {
     plan: "Plan",
     unknown: "Unknown",
     refresh: "Refresh",
+    panelAdd: "Add a panel: another account's quota window",
+    panelAddMax: "Panel limit reached",
+    panelRemove: "Remove this panel: its sign-in data is erased",
+    panelRemoveMain: "The main panel can't be removed (at least one must stay)",
+    panelActionFailed: "Panel action failed",
     hide: "Hide",
     settings: "Settings",
     hideToTray: "Hide",
@@ -464,6 +478,7 @@ function renderStaticCopy() {
   renderCompactButton(state.compact);
   setAttr(els.refreshBtn, "title", t("refresh"));
   setAttr(els.refreshBtn, "aria-label", t("refresh"));
+  renderPanelState(state.panel);
   setAttr(els.settingsBtn, "title", t("settings"));
   setAttr(els.settingsBtn, "aria-label", t("settings"));
   setAttr(els.compactSettingsBtn, "title", t("settings"));
@@ -1218,7 +1233,57 @@ window.addEventListener("mouseout", (event) => {
 els.compactHud.addEventListener("mousedown", startCompactMove);
 els.compactResizeHandle.addEventListener("mousedown", startCompactResize);
 
+// ---- 面板 ＋／－ ----
+// ＋ 只有主面板能按（它管 profiles.json）；－ 只有額外面板能按（主面板是樞紐，不給關）。
+function renderPanelState(panel) {
+  if (!panel) return;
+  state.panel = panel;
+
+  els.panelAddBtn.disabled = panel.canAdd === false;
+  els.panelRemoveBtn.disabled = panel.canRemove === false;
+
+  // 提示文字講清楚「這顆鈕是幹嘛的」，按不動的時候順便說明為什麼。
+  const addTip = panel.canAdd === false && panel.isDefault ? t("panelAddMax") : t("panelAdd");
+  const removeTip = panel.isDefault ? t("panelRemoveMain") : t("panelRemove");
+  setAttr(els.panelAddBtn, "title", addTip);
+  setAttr(els.panelAddBtn, "aria-label", addTip);
+  setAttr(els.panelRemoveBtn, "title", removeTip);
+  setAttr(els.panelRemoveBtn, "aria-label", removeTip);
+}
+
+function refreshPanelState() {
+  return window.quotaBridge.getPanelState().then(renderPanelState).catch(() => {});
+}
+
+// ＋／－ 失敗時要讓使用者看得見。只寫 console 的話，使用者只會覺得「按了沒反應」。
+let panelFlashTimer = null;
+function flashStatus(message) {
+  clearTimeout(panelFlashTimer);
+  setText(els.statusText, message);
+  // 5 秒後交還給正常的狀態文字（下一次額度更新也會自動蓋掉）。
+  panelFlashTimer = setTimeout(() => renderQuotaState(state.quota), 5000);
+}
+
+function handlePanelResult(result) {
+  if (!result || result.ok !== false) return;
+  if (result.reason === "cancelled") return; // 使用者自己按取消，不是錯誤
+  const message = result.message || t("panelActionFailed");
+  reportInteractionError(new Error(message));
+  flashStatus(message);
+}
+
 els.refreshBtn.addEventListener("click", refreshQuota);
+els.panelAddBtn.addEventListener("click", () => {
+  els.panelAddBtn.disabled = true; // 防連點：新面板要一兩秒才起得來
+  window.quotaBridge
+    .addPanel()
+    .then(handlePanelResult)
+    .catch(reportInteractionError)
+    .finally(() => refreshPanelState());
+});
+els.panelRemoveBtn.addEventListener("click", () => {
+  window.quotaBridge.removePanel().then(handlePanelResult).catch(reportInteractionError);
+});
 els.settingsBtn.addEventListener("click", () => window.quotaBridge.openSettings().catch(reportInteractionError));
 els.compactSettingsBtn.addEventListener("click", () => window.quotaBridge.openSettings().catch(reportInteractionError));
 els.minimizeBtn.addEventListener("click", () => window.quotaBridge.minimize());
@@ -1232,6 +1297,8 @@ els.pinBtn.addEventListener("click", async () => {
 renderCompactTheme(loadCompactTheme(), { persist: false });
 renderSignalSettings(state.signalSettings);
 
+window.quotaBridge.onPanelStateChanged(renderPanelState);
+refreshPanelState();
 window.quotaBridge.onQuotaChanged(renderQuotaState);
 window.quotaBridge.onAlwaysOnTopChanged(renderPin);
 window.quotaBridge.onCompactChanged(renderCompactMode);

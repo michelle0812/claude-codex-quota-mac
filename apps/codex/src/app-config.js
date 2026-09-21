@@ -1,7 +1,7 @@
 // Codex 版的專屬設定：renderer-core.js 與 settings-core.js 都吃這一份。
 // 共用邏輯全部在 src/shared-gen/（來源是 packages/shared/）。
 window.APP_CONFIG = {
-  brandName: "Codex 額度",
+  brandName: "Codex 主帳號",
   compactThemeStorageKey: "codexQuotaCompactTheme",
   emptyErrorCopyKey: "unknown",
 
@@ -15,13 +15,13 @@ window.APP_CONFIG = {
 
   copy: {
     zh: {
-      brand: "Codex 額度",
+      brand: "Codex 主帳號",
       statusLoading: "正在讀取 Codex 額度...",
       statusError: "無法讀取 Codex 額度",
       authRequired: "尚未登入 ChatGPT，請按齒輪 ⚙ 登入"
     },
     en: {
-      brand: "Codex Quota",
+      brand: "Codex Main Account",
       statusLoading: "Reading Codex quota...",
       statusError: "Unable to read Codex quota",
       authRequired: "Not signed in to ChatGPT - open settings ⚙ to sign in"
@@ -62,7 +62,7 @@ window.APP_CONFIG = {
 
   const name = typeof profile.name === "string" ? profile.name.trim() : "";
   if (name) {
-    config.brandName = `Codex 額度 · ${name}`;
+    config.brandName = `Codex · ${name}`;
     config.copy.zh.brand = `Codex · ${name}`;
     config.copy.en.brand = `Codex · ${name}`;
     config.auth.label = `ChatGPT 帳號（${name}）`;

@@ -23,11 +23,24 @@ function resolveProfile(argv, defaultUserDataPath) {
   return core.resolveProfile(argv, defaultUserDataPath, { palette: EXTRA_PROFILE_PALETTE });
 }
 
+// 面板上的 ＋／－。Claude 的額外帳號不需要額外欄位（登入資料本來就在各自的 userData），
+// 所以 buildEntry 只回空物件，新面板開起來後由使用者在齒輪裡登入 claude.ai。
+// 面板上的 ＋／－。Claude 的額外帳號不需要額外欄位，登入資料本來就在各自的 userData 裡，
+// 所以 cleanupEntry 沒事可做 —— 資料夾由主面板的孤兒清理負責刪。
+function panelHooks(app, profile, defaultUserDataPath, { dialog, getWindow } = {}) {
+  return core.panelHooks(app, profile, defaultUserDataPath, {
+    buildEntry: () => ({}),
+    confirmRemove: dialog ? (p) => core.confirmRemovePanel(dialog, getWindow?.(), p) : undefined,
+    cleanupEntry: () => {}
+  });
+}
+
 module.exports = {
   DEFAULT_PROFILE_ID: core.DEFAULT_PROFILE_ID,
   EXTRA_PROFILE_PALETTE,
   resolveProfile,
   listExtraProfileIds: core.listExtraProfileIds,
   launchExtraProfiles: core.launchExtraProfiles,
-  reopenHooks: core.reopenHooks
+  reopenHooks: core.reopenHooks,
+  panelHooks
 };

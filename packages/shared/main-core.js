@@ -76,6 +76,8 @@ function normalizeConfig(raw) {
     preloadPath: raw.preloadPath,
     rendererHtmlPath: raw.rendererHtmlPath,
     settingsHtmlPath: raw.settingsHtmlPath,
+    // 「＋」的命名視窗跟 settings.html 放在同一個 shared-gen 資料夾，自動推出來就好。
+    panelNameHtmlPath: raw.panelNameHtmlPath || path.join(path.dirname(raw.settingsHtmlPath), "panel-name.html"),
     readQuota: raw.readQuota,
     settingsWindowTitle: raw.settingsWindowTitle || "小工具設定",
     settingsWindowSize: {
@@ -83,6 +85,8 @@ function normalizeConfig(raw) {
       height: raw.settingsWindowSize?.height || (raw.auth ? 550 : 500)
     },
     auth: raw.auth || null,
+    // 選用，多帳號用。面板上的 ＋／－ 由這組處理（來源：profile-core.panelHooks）。
+    panels: raw.panels || null,
     // 選用，多帳號用。兩種「叫回視窗」要分開，否則面板互叫會無限循環：
     //   onReopen：macOS 送來 activate（使用者從 Finder / Spotlight / `open -a` 再打開 App）。
     //             同一個 App 多開時 macOS 只會通知其中「一份」，所以每一份都要能把全部面板叫回來。
@@ -155,6 +159,14 @@ function compactMinimumSize(topStrip = isCompactTopStrip) {
 }
 
 async function startApp() {
+  // 主面板開機先收殘骸：上一輪被「－」掉的面板，資料夾是留到現在才刪得掉的。
+  try {
+    const removed = config.panels?.cleanupOrphans?.() || [];
+    if (removed.length > 0) console.log(`已清除被移除面板的資料夾：${removed.join(", ")}`);
+  } catch (error) {
+    console.warn(`清除殘餘面板資料夾失敗：${error.message}`);
+  }
+
   signalSettings = await loadSignalSettings();
   // 一律不在 Dock 顯示。打包版靠 Info.plist 的 LSUIElement 一開始就不出現；
   // 這裡再 hide 一次給 `npm start`（Electron.app 沒有 LSUIElement）用。
@@ -283,6 +295,7 @@ function createWindow() {
 
   window.webContents.on("did-finish-load", () => {
     window.webContents.send("quota:changed", quotaStore.getState());
+    window.webContents.send("panel:stateChanged", getPanelState());
     window.webContents.send("window:alwaysOnTopChanged", isAlwaysOnTop);
     window.webContents.send("window:compactChanged", isCompactMode);
     window.webContents.send("window:compactScaleChanged", compactScale);
@@ -448,6 +461,77 @@ function placeSettingsWindow(window, parent = getLiveWindow()) {
   );
 }
 
+// ---- 面板 ＋／－ ----
+
+function getPanelState() {
+  if (!config.panels?.getState) {
+    return { id: "default", isDefault: true, panelCount: 1, canAdd: false, canRemove: false };
+  }
+  return config.panels.getState();
+}
+
+function broadcastPanelState() {
+  sendToWindow("panel:stateChanged", getPanelState());
+}
+
+// ---- 「＋」的命名視窗 ----
+// Electron 的原生 dialog 沒有輸入框，所以自己開一個小視窗。
+// 回傳使用者填的名字；按取消（或直接關掉視窗）回 null。
+
+function askPanelName(suggestedId) {
+  return new Promise((resolve) => {
+    const parent = getLiveWindow();
+    const win = new BrowserWindow({
+      width: 320,
+      height: 214,
+      parent: parent || undefined,
+      modal: Boolean(parent),
+      resizable: false,
+      minimizable: false,
+      maximizable: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      autoHideMenuBar: true,
+      show: false,
+      title: "面板名稱",
+      backgroundColor: "#111418",
+      icon: config.appIconPath,
+      webPreferences: {
+        preload: config.preloadPath,
+        contextIsolation: true,
+        nodeIntegration: false
+      }
+    });
+
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      ipcMain.removeListener("panelName:submit", onSubmit);
+      ipcMain.removeListener("panelName:ready", onReady);
+      resolve(value);
+      if (!win.isDestroyed()) win.close();
+    };
+
+    const onSubmit = (event, name) => {
+      if (event.sender !== win.webContents) return;
+      const trimmed = typeof name === "string" ? name.trim().slice(0, 24) : "";
+      finish(name === null ? null : trimmed);
+    };
+    const onReady = (event) => {
+      if (event.sender !== win.webContents) return;
+      win.webContents.send("panelName:show", { id: suggestedId, lang: signalSettings?.lang || "zh" });
+      win.show();
+    };
+
+    ipcMain.on("panelName:submit", onSubmit);
+    ipcMain.on("panelName:ready", onReady);
+    // 直接把視窗叉掉 = 取消。
+    win.on("closed", () => finish(null));
+    win.loadFile(config.panelNameHtmlPath, htmlLoadOptions());
+  });
+}
+
 function registerIpcHandlers() {
   if (ipcHandlersRegistered) return;
   ipcHandlersRegistered = true;
@@ -456,6 +540,26 @@ function registerIpcHandlers() {
   ipcMain.handle("quota:refresh", () => quotaStore.refreshNow("manual"));
   ipcMain.handle("window:minimize", hideWindow);
   ipcMain.handle("window:close", quitApp);
+  ipcMain.handle("panel:state", () => getPanelState());
+  ipcMain.handle("panel:add", async () => {
+    if (!config.panels?.add) return { ok: false, reason: "unsupported" };
+
+    // 先讓使用者替新面板取名字，取消就什麼都不做（不會留下半個 profile）。
+    const suggestedId = config.panels.nextId?.() || "";
+    const name = await askPanelName(suggestedId);
+    if (name === null) return { ok: false, reason: "cancelled" };
+
+    // add() 會等新面板真的起來（或逾時撤回），所以這裡要 await。
+    const result = (await config.panels.add({ name })) || { ok: false, reason: "unsupported" };
+    broadcastPanelState();
+    return result;
+  });
+  ipcMain.handle("panel:remove", () => {
+    const result = config.panels?.remove?.() || { ok: false, reason: "unsupported" };
+    // 只有真的移除成功才關自己；擋下來的時候（主面板）App 要留著。
+    if (result.ok && result.quitSelf) quitApp();
+    return result;
+  });
   ipcMain.handle("window:openSettings", () => {
     openSignalSettingsWindow();
   });

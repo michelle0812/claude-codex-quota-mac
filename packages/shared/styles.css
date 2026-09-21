@@ -226,6 +226,17 @@ button {
   transform: translateY(1px);
 }
 
+/* 停用的按鈕（主面板的「－」、已達上限的「＋」）：看得到但按不動。 */
+.icon-button:disabled,
+.icon-button:disabled:hover {
+  opacity: 0.3;
+  cursor: default;
+  transform: none;
+  border-color: rgba(238, 247, 241, 0.12);
+  background: transparent;
+  color: inherit;
+}
+
 .icon-button.danger:hover {
   border-color: rgba(255, 107, 107, 0.55);
   background: rgba(255, 107, 107, 0.16);
@@ -501,6 +512,57 @@ body[data-state="danger"] .liquid-fill {
   margin-top: 10px;
   color: rgba(238, 247, 241, 0.64);
   font-size: 11px;
+}
+
+/* 狀態列最左邊的 ＋／－：跟著 11px 的狀態列縮小，寬度固定才不會擠掉「額度已更新」。 */
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  margin-right: 1px;
+  /* 整個面板是拖曳視窗的區域（見上面的 -webkit-app-region: drag），
+     不解除的話滑鼠事件會被系統吃掉：hover 沒反應、按了也沒反應。 */
+  -webkit-app-region: no-drag;
+}
+
+.panel-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid rgba(238, 247, 241, 0.16);
+  border-radius: 5px;
+  background: transparent;
+  color: rgba(238, 247, 241, 0.7);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.panel-btn svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+
+.panel-btn:hover:not(:disabled) {
+  border-color: rgba(var(--app-weekly-rgb), 0.5);
+  background: rgba(var(--app-weekly-rgb), 0.18);
+  color: #ffffff;
+}
+
+.panel-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.panel-btn:disabled {
+  opacity: 0.28;
+  cursor: default;
 }
 
 #statusText {

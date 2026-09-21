@@ -104,6 +104,18 @@
       </section>
 
       <footer class="status">
+        <span class="panel-actions">
+          <button id="panelAddBtn" class="panel-btn" type="button" title="新增一個面板：多一個帳號的額度視窗" aria-label="新增一個面板">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </button>
+          <button id="panelRemoveBtn" class="panel-btn" type="button" title="移除這個面板：登入資料會一併清空" aria-label="移除這個面板">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 12h14" />
+            </svg>
+          </button>
+        </span>
         <span id="statusDot" class="status-dot loading"></span>
         <span id="statusText">正在讀取額度...</span>
         <span id="accountBadge" class="account-badge" aria-label="目前額度來源帳號"></span>
