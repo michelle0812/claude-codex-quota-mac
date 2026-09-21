@@ -152,6 +152,9 @@ class QuotaStore extends EventEmitter {
       this.scheduleNextRefresh();
     } catch (error) {
       this.failureCount += 1;
+      // 讀取失敗只會顯示在面板上那一行字，查問題時看不到細節。留一份到 console，
+      // 從終端機啟動 App 就能看到完整原因（面板空間有限，塞不下這些）。
+      console.warn(`額度讀取失敗（第 ${this.failureCount} 次）：${error?.message || error}`);
       this.state = {
         ...this.state,
         status: "error",

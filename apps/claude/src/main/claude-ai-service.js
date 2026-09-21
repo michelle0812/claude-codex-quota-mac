@@ -365,7 +365,14 @@ async function getQuota({ useLocalPlan = true } = {}) {
   const fiveHour = data?.five_hour;
   const sevenDay = data?.seven_day;
   if (!fiveHour && !sevenDay) {
-    throw new Error("claude.ai 回傳的用量資料缺少 five_hour / seven_day 區塊。");
+    // claude.ai 有回應、欄位也都在，但值全是 null —— 某些方案（例如短期／促銷方案）
+    // 在這支 API 裡就是拿不到用量。面板上要講人話，技術細節留到 console。
+    // 只列欄位名與型別，不帶值，免得把帳號內容寫進 log。
+    const filled = data && typeof data === "object"
+      ? Object.entries(data).filter(([, v]) => v !== null && v !== undefined).map(([k, v]) => `${k}:${Array.isArray(v) ? "[]" : typeof v}`)
+      : [];
+    console.warn(`claude.ai usage 沒有可用資料，有值的欄位只有：${filled.join(", ") || "(全部是空的)"}`);
+    throw new Error("claude.ai 沒有提供這個帳號的用量資料，可能是這個方案不支援。");
   }
 
   const { accountEmail, accountLabel } = await resolveAccount(credentials);
