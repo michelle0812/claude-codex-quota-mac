@@ -2,8 +2,9 @@
 
 // Codex 版的多帳號設定。共用邏輯（argv、profiles.json、userData、帶起其他面板）在
 // shared-gen/profile-core.js；這裡只加 Codex 自己的部分：
-//   - 額外帳號必須有 codexHome（該帳號 auth.json 所在目錄，等同 CODEX_HOME）
-//   - default 的 codexHome 可有可無：有寫就跟 CLI 的 ~/.codex 脫鉤，沒寫才走舊路徑
+//   - 每個帳號的 codexHome（該帳號 auth.json 所在目錄，等同 CODEX_HOME）；沒寫就用
+//     ~/.codex/<id> 推出來，main 是 ~/.codex/0 —— 每個面板都有自己的窩，
+//     不跟 CLI 的 ~/.codex/auth.json 共用（那份會被 codex login/logout 改掉）
 //   - 額外帳號的預設調色盤
 // 登入用齒輪裡的「登入 ChatGPT」，或 `CODEX_HOME=~/.codex-2 codex login`。
 
@@ -21,19 +22,24 @@ const EXTRA_PROFILE_PALETTE = [
   { weekly: "#C87A26", weeklyStrong: "#E09A52", short: "#F0BE7D", shortStrong: "#F8DAB0" } // 橘
 ];
 
+// codexHome 不再是必填：沒寫就用 defaultCodexHomeFor(id) 推出來的窩。
+// 以前少寫一行整個 profile 會被悄悄略過（面板直接不見），沒必要這麼嚴格。
+// 寫了但空字串／只有空白才算錯。
 function validateEntry(entry) {
-  return core.expandHome(entry.codexHome) ? null : "缺少 codexHome";
+  if (entry.codexHome === undefined || entry.codexHome === null) return null;
+  return core.expandHome(entry.codexHome) ? null : "codexHome 是空的";
 }
 
 function resolveProfile(argv, defaultUserDataPath) {
   const profile = core.resolveProfile(argv, defaultUserDataPath, { palette: EXTRA_PROFILE_PALETTE, validateEntry });
-  const codexHome = core.expandHome(profile.entry.codexHome);
+  // profiles.json 有明寫 codexHome 就聽它的（使用者自己指的路徑，不覆蓋）；
+  // 沒寫就用這個 profile 的預設窩，default 也一樣有自己的（~/.codex/0）。
+  const codexHome = core.expandHome(profile.entry.codexHome) || defaultCodexHomeFor(profile.id);
   return {
     id: profile.id,
     name: profile.name,
     userDataPath: profile.userDataPath,
-    // null = default 沒寫 codexHome，quota-service 走原本的 CODEX_AUTH_FILE / ~/.codex/auth.json
-    authFilePath: codexHome ? path.join(codexHome, "auth.json") : null,
+    authFilePath: path.join(codexHome, "auth.json"),
     accent: profile.accent
   };
 }
@@ -41,8 +47,13 @@ function resolveProfile(argv, defaultUserDataPath) {
 // 面板上的 ＋／－。Codex 的每個帳號要有自己的 CODEX_HOME，新面板預設收在
 // ~/.codex/<id>（不是在家目錄旁邊長 ~/.codex-2、~/.codex-3）。
 // 目錄一開始是空的，使用者在齒輪裡登入 ChatGPT 之後才會寫出 auth.json。
+// main 面板用 ~/.codex/0，跟 add-N 一樣是自己的窩。
+// 刻意不讓它用 CLI 的 ~/.codex/auth.json：那份會被終端機的 codex login / logout 改掉，
+// 面板顯示的帳號就會跟著跳，登出時還直接失效。面板要的是一個固定不動的帳號。
+const MAIN_CODEX_DIR = "0";
+
 function defaultCodexHomeFor(id) {
-  return path.join(os.homedir(), ".codex", id);
+  return path.join(os.homedir(), ".codex", id === core.DEFAULT_PROFILE_ID ? MAIN_CODEX_DIR : id);
 }
 
 // 「－」刪掉這個帳號的 codexHome。
