@@ -3,19 +3,12 @@
 // 設定視窗（齒輪）裡的「ChatGPT 帳號登入」。每個 profile 一份，登入結果寫進該 profile 的
 // <CODEX_HOME>/auth.json，格式跟 `codex login` 寫的一樣，所以 Codex CLI 也讀得懂。
 //
-// 流程跟 Codex CLI 的瀏覽器登入相同（參數取自 codex-cli 0.154.0 的 login/src/server.rs）：
-//   1. 產生 PKCE verifier/challenge 與 state
-//   2. 開 https://auth.openai.com/oauth/authorize?...，redirect_uri=http://localhost:1455/auth/callback
-//   3. CLI 會在 1455 埠起本機 server 接 code；我們是 App 內視窗，直接在 webRequest 攔下那個網址，
-//      不用佔埠，也不會跟正在跑的 `codex login` 撞埠
-//   4. POST /oauth/token（form-urlencoded, grant_type=authorization_code）換 token
-//
-// 登入視窗用「每次新開、不落地」的 session partition：瀏覽器裡已登入的帳號不會被自動帶進來，
-// 三個面板才能各登各的帳號。
+// 使用系統瀏覽器完成驗證，透過僅綁定 loopback 的 HTTP server 接回 PKCE code。
+// 各面板仍寫入自己的 auth.json；瀏覽器的帳號需由使用者確認。
 
 const crypto = require("node:crypto");
 const fs = require("node:fs/promises");
-const { BrowserWindow, session } = require("electron");
+const http = require("node:http");
 const {
   OAUTH_CLIENT_ID,
   TOKEN_URL,
@@ -29,9 +22,7 @@ const REDIRECT_URI = "http://localhost:1455/auth/callback";
 const SCOPE = "openid profile email offline_access api.connectors.read api.connectors.invoke";
 const ORIGINATOR = "codex_cli_rs";
 const TOKEN_TIMEOUT_MS = 20000;
-// OpenAI / Google 對「Electron」字樣的 UA 會比較刁難，登入視窗用一般 Chrome 的 UA。
-const CHROME_USER_AGENT =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
 
 function base64url(buffer) {
   return buffer.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -69,85 +60,86 @@ function parseCallbackUrl(url, expectedState) {
   }
   if (`${parsed.origin}${parsed.pathname}` !== REDIRECT_URI) return null;
 
+  if (parsed.searchParams.get("state") !== expectedState) {
+    throw new Error("ChatGPT 登入失敗：state 不符，已中止（請重試）");
+  }
   const error = parsed.searchParams.get("error");
   if (error) {
     const description = parsed.searchParams.get("error_description");
     throw new Error(`ChatGPT 登入失敗：${description || error}`);
-  }
-  if (parsed.searchParams.get("state") !== expectedState) {
-    throw new Error("ChatGPT 登入失敗：state 不符，已中止（請重試）");
   }
   const code = parsed.searchParams.get("code");
   if (!code) throw new Error("ChatGPT 登入失敗：回呼網址沒有 code");
   return code;
 }
 
-// 開 App 內登入視窗，等到 OpenAI 導回 callback，回傳 authorization code。
-function captureAuthorizationCode({ authorizeUrl, state, title }) {
+// 先監聽再開瀏覽器；同時登入另一個面板時會明確回報埠被占用。
+function captureAuthorizationCode({
+  authorizeUrl,
+  state,
+  openExternal = (url) => require("electron").shell.openExternal(url),
+  port = 1455,
+  timeoutMs = LOGIN_TIMEOUT_MS
+}) {
   return new Promise((resolve, reject) => {
-    const partition = `codex-login-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
-    const loginSession = session.fromPartition(partition, { cache: false });
-    const loginWin = new BrowserWindow({
-      width: 520,
-      height: 760,
-      title,
-      autoHideMenuBar: true,
-      webPreferences: {
-        session: loginSession,
-        nodeIntegration: false,
-        contextIsolation: true,
-        sandbox: true
+    let settled = false;
+    const server = http.createServer((request, response) => {
+      const reply = (status, message) => {
+        response.writeHead(status, {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Referrer-Policy": "no-referrer",
+          "Connection": "close"
+        });
+        response.end(message);
+      };
+      let url;
+      try {
+        url = new URL(request.url, REDIRECT_URI);
+      } catch {
+        reply(400, "無效的登入回呼。");
+        return;
+      }
+      if (request.method !== "GET" || `${url.origin}${url.pathname}` !== REDIRECT_URI) {
+        reply(404, "找不到此頁面。");
+        return;
+      }
+      // 過期分頁或其他登入流程不得中止這次登入。
+      if (url.searchParams.get("state") !== state) {
+        reply(400, "登入驗證不符，請使用這次開啟的登入分頁。");
+        return;
+      }
+      try {
+        const code = parseCallbackUrl(url.href, state);
+        reply(200, "已收到授權回覆，請回到 Codex 額度確認登入結果。此分頁可以關閉。");
+        finish(null, code);
+      } catch (error) {
+        response.once("finish", () => finish(error));
+        reply(400, "登入未完成，請回到 Codex 額度重試。");
       }
     });
-
-    let settled = false;
-    const popups = new Set();
-    const finish = (fn, arg) => {
+    const timer = setTimeout(() => finish(new Error("等待瀏覽器登入逾時，請重新點選登入 ChatGPT")), timeoutMs);
+    function finish(error, code) {
       if (settled) return;
       settled = true;
-      loginSession.webRequest.onBeforeRequest(null);
-      for (const popup of popups) if (!popup.isDestroyed()) popup.close();
-      if (!loginWin.isDestroyed()) loginWin.close();
-      loginSession.clearStorageData().catch(() => {});
-      fn(arg);
-    };
-
-    loginSession.webRequest.onBeforeRequest({ urls: ["http://localhost:1455/*"] }, (details, callback) => {
-      callback({ cancel: true });
-      try {
-        const code = parseCallbackUrl(details.url, state);
-        if (code) finish(resolve, code);
-      } catch (error) {
-        finish(reject, error);
+      clearTimeout(timer);
+      server.close();
+      if (error) server.closeAllConnections();
+      else server.closeIdleConnections();
+      if (error) reject(error);
+      else resolve(code);
+    }
+    server.on("error", (error) => finish(new Error(error.code === "EADDRINUSE"
+      ? "登入連接埠 1455 已被占用，請先完成其他面板或 Codex CLI 的登入，再重試"
+      : `無法啟動登入回呼：${error.message}`)));
+    server.listen(port, "127.0.0.1", () => {
+      if (settled) {
+        server.close();
+        return;
       }
-    });
-
-    // 登入頁會開 Google 等小彈窗。讓它照常以子視窗開（同一個 session，callback 一樣攔得到），
-    // 不能把網址搶進主視窗載入：那樣 OpenAI 登入頁一打開就被帶去 Google，沒機會選 Email 登入。
-    loginWin.webContents.setWindowOpenHandler(({ url }) => {
-      if (!/^https:\/\//.test(url)) return { action: "deny" };
-      return {
-        action: "allow",
-        overrideBrowserWindowOptions: {
-          width: 500,
-          height: 680,
-          autoHideMenuBar: true,
-          webPreferences: { session: loginSession, nodeIntegration: false, contextIsolation: true, sandbox: true }
-        }
-      };
-    });
-    loginWin.webContents.on("did-create-window", (popup) => {
-      popups.add(popup);
-      popup.webContents.setUserAgent(CHROME_USER_AGENT);
-      popup.on("closed", () => popups.delete(popup));
-    });
-
-    loginWin.on("closed", () => finish(reject, new Error("登入視窗已關閉，未完成登入")));
-    loginWin.loadURL(authorizeUrl, { userAgent: CHROME_USER_AGENT }).catch((error) => {
-      // callback 被我們 cancel 時 loadURL 也會 reject（ERR_BLOCKED_BY_CLIENT），那不算失敗。
-      if (!settled && !/ERR_BLOCKED_BY_CLIENT|ERR_ABORTED/.test(String(error?.message))) {
-        finish(reject, new Error(`無法開啟 ChatGPT 登入頁：${error.message}`));
-      }
+      Promise.resolve().then(() => openExternal(authorizeUrl)).catch(() => {
+        finish(new Error("無法開啟系統瀏覽器，請確認預設瀏覽器設定後重試"));
+      });
     });
   });
 }
@@ -206,7 +198,7 @@ function buildAuthJson(tokenResponse, now = new Date()) {
   };
 }
 
-function createCodexAuth({ authFilePath, profileName }) {
+function createCodexAuth({ authFilePath }) {
   async function hasSession() {
     try {
       await readAuthFile(authFilePath);
@@ -221,8 +213,7 @@ function createCodexAuth({ authFilePath, profileName }) {
     const state = base64url(crypto.randomBytes(24));
     const code = await captureAuthorizationCode({
       authorizeUrl: buildAuthorizeUrl({ challenge, state }),
-      state,
-      title: profileName ? `登入 ChatGPT（${profileName}）` : "登入 ChatGPT"
+      state
     });
     const tokens = await exchangeCode({ code, verifier });
     const authJson = buildAuthJson(tokens);
@@ -248,6 +239,7 @@ module.exports = {
   REDIRECT_URI,
   createCodexAuth,
   createPkce,
+  captureAuthorizationCode,
   buildAuthorizeUrl,
   parseCallbackUrl,
   buildAuthJson

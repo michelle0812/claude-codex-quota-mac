@@ -66,7 +66,7 @@ function verifyMissingOrBrokenFile() {
     const profile = resolveProfile([], dir);
     assert.equal(profile.id, DEFAULT_PROFILE_ID);
     assert.equal(profile.userDataPath, dir);
-    assert.equal(profile.authFilePath, null);
+    assert.equal(profile.authFilePath, path.join(os.homedir(), ".codex", "0", "auth.json"));
     assert.equal(profile.name, null);
     assert.equal(profile.accent, null);
   });
@@ -107,16 +107,16 @@ function verifyProfilesFile() {
   });
 
   withUserData(json, (dir) => {
-    assert.deepEqual(listExtraProfileIds(dir), ["2", "3", "custom"]);
+    assert.deepEqual(listExtraProfileIds(dir), ["2", "3", "nohome", "custom"]);
 
     const main = resolveProfile([], dir);
     assert.equal(main.name, "個人");
     assert.equal(main.userDataPath, dir);
-    assert.equal(main.authFilePath, null);
+    assert.equal(main.authFilePath, path.join(os.homedir(), ".codex", "0", "auth.json"));
 
     const two = resolveProfile(["--profile=2"], dir);
     assert.equal(two.name, "工作");
-    assert.equal(two.userDataPath, `${dir}-2`);
+    assert.equal(two.userDataPath, path.join(dir, "profiles", "2"));
     assert.equal(two.authFilePath, path.join(os.homedir(), ".codex-2", "auth.json"));
     assert.deepEqual(two.accent, EXTRA_PROFILE_PALETTE[0]);
 
@@ -128,7 +128,7 @@ function verifyProfilesFile() {
     const custom = resolveProfile(["--profile=custom"], dir);
     assert.equal(custom.accent.weekly, "#112233");
 
-    assert.throws(() => resolveProfile(["--profile=nohome"], dir), /找不到 profile/);
+    assert.equal(resolveProfile(["--profile=nohome"], dir).authFilePath, path.join(os.homedir(), ".codex", "nohome", "auth.json"));
   });
 }
 
@@ -161,7 +161,7 @@ function verifyAppConfigOverride() {
 
   const plain = { window: {}, URLSearchParams, location: { search: "" } };
   vm.runInNewContext(fs.readFileSync(file, "utf8"), plain, { filename: file });
-  assert.equal(plain.window.APP_CONFIG.copy.zh.brand, "Codex 額度");
+  assert.equal(plain.window.APP_CONFIG.copy.zh.brand, "Codex 主帳號");
   assert.equal(plain.window.APP_CONFIG.accent.weekly, "#25985F");
 }
 

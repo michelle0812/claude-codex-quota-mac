@@ -152,14 +152,16 @@ Claude Code ──stdin JSON──▶ usage-statusline.py ──▶ ~/.claude/us
 
 ### 登入：齒輪 → 「登入 ChatGPT」
 
-設定視窗的「ChatGPT 帳號」區塊會開一個 App 內登入視窗，流程與參數同 `codex login`
-（OAuth PKCE，redirect 在 App 內攔下，不佔本機埠）。登入視窗每次都用全新、不落地的 session，
-瀏覽器裡已登入的帳號不會被自動帶入，所以每個面板可以各登各的帳號。
+設定視窗的「ChatGPT 帳號」區塊會開啟系統預設瀏覽器，使用 OAuth PKCE 登入，
+透過本機 `http://localhost:1455/auth/callback` 接回授權結果（只監聽 loopback）。
+請確認瀏覽器選擇的是此面板要使用的帳號；若已登入其他帳號，請在登入頁切換帳號。
+一次只能登入一個面板；若連接埠被其他面板或 Codex CLI 占用，請完成該次登入後重試。
+登入等待最多 5 分鐘；關閉瀏覽器分頁後，需等待逾時才能重試。
 寫出的 `auth.json` 格式與 `codex login` 相同，Codex CLI 也讀得懂。
 
 - **登出**不刪檔：舊檔改名為 `auth.json.logout-<時間>` 保留，登出錯帳號還救得回來。
-- 預設面板用的是 `~/.codex/auth.json`，**與 Codex CLI 共用**；在預設面板換帳號，終端機的 `codex` 也會跟著換。
-- 仍可用終端機登入：預設帳號 `codex login`，其他帳號 `CODEX_HOME=~/.codex-2 codex login`。
+- 預設面板使用 `~/.codex/0/auth.json`，新增面板預設使用 `~/.codex/<面板 id>/auth.json`；各面板與 Codex CLI 的預設帳號分開儲存。自訂 `codexHome` 時以該設定為準。
+- 仍可用終端機登入，例如預設面板：`CODEX_HOME=~/.codex/0 codex login`。
 
 ### 多帳號：一個帳號一個面板
 

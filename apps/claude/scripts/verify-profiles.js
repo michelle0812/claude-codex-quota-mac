@@ -42,7 +42,7 @@ function verifyResolve() {
     const two = resolveProfile(["--profile=2"], dir);
     assert.equal(two.isDefault, false);
     assert.equal(two.name, "新帳號");
-    assert.equal(two.userDataPath, `${dir}-2`, "claude.ai 登入存在 userData，額外帳號一定要分開");
+    assert.equal(two.userDataPath, path.join(dir, "profiles", "2"), "claude.ai 登入存在 userData，額外帳號一定要分開");
     assert.deepEqual(two.accent, EXTRA_PROFILE_PALETTE[0]);
 
     const three = resolveProfile(["--profile=3"], dir);
@@ -83,7 +83,7 @@ function verifyAppConfigOverride() {
   assert.match(config.copy.zh.authRequired, /齒輪/, "額外帳號沒有本機 statusLine，提示要改成去齒輪登入");
 
   const plain = loadAppConfig("claude", "");
-  assert.equal(plain.copy.zh.brand, "Claude 用量");
+  assert.equal(plain.copy.zh.brand, "Claude 主帳號");
   assert.equal(plain.accent.weekly, "#2694C8");
   assert.match(plain.copy.zh.authRequired, /statusLine/);
 }

@@ -36,7 +36,7 @@ window.APP_CONFIG = {
     loggedOutText: "未登入：按「登入 ChatGPT」選擇要看的帳號",
     loginLabel: "登入 ChatGPT",
     logoutLabel: "登出",
-    loginPendingText: "請在跳出的視窗登入 ChatGPT…",
+    loginPendingText: "請在系統瀏覽器登入 ChatGPT，並確認選擇此面板要使用的帳號（5 分鐘內）…",
     loginDoneText: "已登入 ChatGPT",
     logoutDoneText: "已登出（舊登入檔已改名保留）"
   }

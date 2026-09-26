@@ -6,10 +6,12 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const http = require("node:http");
 const {
   REDIRECT_URI,
   createCodexAuth,
   createPkce,
+  captureAuthorizationCode,
   buildAuthorizeUrl,
   parseCallbackUrl,
   buildAuthJson
@@ -87,12 +89,54 @@ async function verifySessionAndLogout() {
   }
 }
 
+async function verifyBrowserCallback() {
+  // 真正走 loopback HTTP，但不開瀏覽器、不連外、不使用真實帳號。
+  const probe = http.createServer();
+  await new Promise((resolve) => probe.listen(0, "127.0.0.1", resolve));
+  const port = probe.address().port;
+  await new Promise((resolve) => probe.close(resolve));
+  const base = `http://127.0.0.1:${port}`;
+  const options = { authorizeUrl: "https://auth.openai.com/", state: "S", port, timeoutMs: 2000 };
+  let browserChecks;
+  const result = captureAuthorizationCode({ ...options, openExternal: (url) => {
+    browserChecks = (async () => {
+      assert.equal(url, options.authorizeUrl);
+      const wrong = await fetch(`${base}/auth/callback?code=wrong&state=old`);
+      assert.equal(wrong.status, 400);
+      await wrong.text();
+      const missing = await fetch(`${base}/favicon.ico`);
+      assert.equal(missing.status, 404);
+      await missing.text();
+      const valid = await fetch(`${base}/auth/callback?code=correct&state=S`);
+      assert.equal(valid.status, 200);
+      assert.match(await valid.text(), /回到 Codex/);
+    })();
+    return browserChecks;
+  } });
+  assert.equal(await result, "correct");
+  await browserChecks;
+  await assert.rejects(captureAuthorizationCode({ ...options, openExternal: () => {
+    throw new Error("browser unavailable");
+  } }), /無法開啟系統瀏覽器/);
+  await assert.rejects(captureAuthorizationCode({ ...options, timeoutMs: 30, openExternal: () => {} }), /逾時/);
+  const occupied = http.createServer();
+  await new Promise((resolve) => occupied.listen(port, "127.0.0.1", resolve));
+  try {
+    await assert.rejects(captureAuthorizationCode({ ...options, openExternal: () => {
+      assert.fail("埠被占用時不應開啟瀏覽器");
+    } }), /已被占用/);
+  } finally {
+    await new Promise((resolve) => occupied.close(resolve));
+  }
+}
+
 (async () => {
   verifyPkce();
   verifyAuthorizeUrl();
   verifyParseCallback();
   verifyAuthJson();
   await verifySessionAndLogout();
+  await verifyBrowserCallback();
   console.log("Verified Codex auth: PKCE, authorize URL params, callback parsing, auth.json shape, and logout rename.");
 })().catch((error) => {
   console.error(error);
