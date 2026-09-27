@@ -6,7 +6,9 @@ const { buildPaceAdvice } = require("../shared-gen/pace-advice");
 // Codex 額度 = ChatGPT 訂閱方案的用量。直接打 OpenAI 的內部 endpoint 拿，
 // 憑證用 Codex CLI 登入後留在 ~/.codex/auth.json 的 OAuth token，不再 spawn `codex` 子行程：
 //   GET https://chatgpt.com/backend-api/wham/usage   Authorization: Bearer <access_token>
-// token 過期就用 refresh_token 換新，再原子寫回 auth.json（沿用 Codex CLI 自己的檔案格式）。
+// 唯讀：只讀 auth.json 現有的 access_token 打 usage，絕不 refresh／寫回 auth.json，
+// 以免輪替掉 Codex CLI 正在用的 refresh_token（會造成 401 token_revoked）。
+// token 的新鮮度交由 codex CLI 自己維持。
 // client id / endpoint 皆為 OpenAI 未公開介面（見 openai/codex codex-rs/login、backend-client），
 // 改版即可能失效。
 
@@ -15,7 +17,6 @@ const USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
 const TOKEN_URL = "https://auth.openai.com/oauth/token";
 const OAUTH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 const REQUEST_TIMEOUT_MS = 12000;
-const TOKEN_REFRESH_SKEW_MS = 5 * 60 * 1000; // 距到期不到 5 分鐘就先 refresh
 
 const FIVE_HOUR_WINDOW_MINS = 5 * 60;
 const SEVEN_DAY_WINDOW_MINS = 7 * 24 * 60;
@@ -122,57 +123,12 @@ async function fetchJson(url, options, label, filePath) {
   }
 }
 
-async function refreshTokens(authData) {
-  const data = await fetchJson(
-    TOKEN_URL,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        client_id: OAUTH_CLIENT_ID,
-        grant_type: "refresh_token",
-        refresh_token: authData.tokens.refresh_token,
-        scope: "openid profile email"
-      })
-    },
-    "刷新 Codex 登入",
-    authData.filePath
-  );
-
-  if (!data?.access_token) {
-    throw new Error("刷新 Codex 登入沒有回傳 access_token。");
-  }
-
-  const nextTokens = {
-    ...authData.tokens,
-    access_token: data.access_token,
-    id_token: data.id_token || authData.tokens.id_token,
-    // OpenAI 每次 refresh 會輪替 refresh_token，一定要寫回。
-    refresh_token: data.refresh_token || authData.tokens.refresh_token
-  };
-  await writeAuthFileAtomically(authData.filePath, {
-    ...authData.parsed,
-    tokens: nextTokens,
-    last_refresh: new Date().toISOString()
-  });
-  return nextTokens;
-}
-
+// 唯讀：只讀出 auth.json 現有的 token，不做任何 refresh／寫回。
+// access_token 若已過期，fetchUsage() 打 usage 時會收到 401，由 fetchJson() 轉成
+// 「請重新登入」的友善錯誤；token 的更新交給 codex CLI 自己完成。
 async function getValidTokens(authFilePath) {
   const authData = await readAuthFile(authFilePath);
-  const expiryMs = decodeJwtExpiryMs(authData.tokens.id_token);
-  const needsRefresh = expiryMs === null || expiryMs - Date.now() < TOKEN_REFRESH_SKEW_MS;
-  if (!needsRefresh) return authData.tokens;
-
-  try {
-    return await refreshTokens(authData);
-  } catch (error) {
-    if (String(error?.message).includes("authentication required")) throw error;
-    // refresh 本身失敗（例如暫時性網路問題），手上的 access_token 也許還能撐一下，
-    // 直接拿去打 usage；真的不行 fetchUsage() 會回 auth 錯誤。
-    console.warn(`刷新 Codex 登入失敗，改用現有 token 試一次：${error.message}`);
-    return authData.tokens;
-  }
+  return authData.tokens;
 }
 
 async function fetchUsage(authFilePath) {
