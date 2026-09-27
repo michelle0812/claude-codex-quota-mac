@@ -212,6 +212,21 @@ OpenAI 未公開介面，改版即可能失效；失效時在齒輪裡重新登�
 
 ---
 
+## 自動更新（v1.2.1 起）
+
+啟用「自動檢查更新」後，主面板每次啟動與每週一上午 10:00（台灣時間）檢查 GitHub 最新正式版。
+發現新版會詢問是否更新；按「稍後」不下載，仍可按面板上的更新按鈕重新檢查。
+同意後顯示下載進度，自動下載該 App 對應架構的 DMG，核對 SHA-256、App 身分、版本與簽章，
+關閉此 App 的所有面板後替換並重新啟動。帳號及設定目錄不會被替換。
+
+App 必須安裝在可寫入的資料夾；從 DMG 或 macOS 暫存隔離路徑執行時，請先移到 Applications。
+下載或驗證失敗會保留現有版本；替換或啟動指令失敗時會嘗試還原舊版。
+舊版備份保留在 App 同一層的 `.quota-update-*/previous.app`，安裝結果位於各 App 的 userData 下 `update-result.json`。
+自動還原不涵蓋新版成功啟動後才發生的執行錯誤。
+
+**v1.2.0 及更早版本需手動安裝 v1.2.1 一次**，之後才具備自動安裝功能。
+發行時必須使用 `npm run build-release` 產生並一併上傳 `SHA256SUMS.txt`，缺少校驗檔不會自動安裝。
+
 ## 排錯：Electron 只裝了一個空殼
 
 如果 `npm start` 或 `npm run build` 出現 `Electron failed to install correctly`，

@@ -2,7 +2,7 @@
 
 // 薄殼：視窗、IPC、設定儲存等共用邏輯都在 shared-gen/main-core.js（來源是
 // packages/shared/main-core.js）。這裡只負責組出 Codex 版專屬的 config。
-// 設定視窗（齒輪）的帳號區塊由 codex-auth-service.js 提供：App 內登入 ChatGPT，寫進該 profile 的 auth.json。
+// 設定視窗（齒輪）的帳號區塊由 codex-auth-service.js 提供：系統瀏覽器登入 ChatGPT，寫進該 profile 的 auth.json。
 //
 // 多帳號：一個 profile 一個行程（見 profile.js）。default 行程啟動後會把
 // profiles.json 裡的其他帳號各帶起一份；已經在跑的會被 single-instance lock 擋掉。
@@ -37,6 +37,10 @@ const codexAuth = createCodexAuth({
 });
 
 startQuotaWidget({
+  updater: {
+    productName: "Codex 額度", assetPrefix: "CodexQuota", bundleId: "cn.codex.quota.widget",
+    dataDir: defaultUserDataPath, isDefault: profile.id === DEFAULT_PROFILE_ID
+  },
   appIconPath: path.join(__dirname, "../../assets/app-icon.png"),
   preloadPath: path.join(__dirname, "../shared-gen/preload.js"),
   rendererHtmlPath: path.join(__dirname, "../shared-gen/renderer.html"),

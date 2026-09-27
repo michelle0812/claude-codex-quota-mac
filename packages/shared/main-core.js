@@ -7,18 +7,21 @@
 // 沒有帳號功能的 app（Codex）把 config.auth 傳成 null 即可，
 // 相關的 IPC 與設定視窗欄位就不會註冊。
 
-const { app, BrowserWindow, ipcMain, screen, shell, Notification } = require("electron");
+const { app, BrowserWindow, ipcMain, screen, shell, dialog } = require("electron");
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const { prepareUpdate, launchInstaller } = require("./mac-updater");
 const { QuotaStore } = require("./quota-store");
 const { DEFAULT_WIDGET_SETTINGS, normalizeWidgetSettings } = require("./widget-settings");
 const { COMPACT_LAYOUT } = require("./compact-layout");
 const { isNewerVersion, msUntilNextWeeklySlot, fetchLatestRelease, RELEASES_PAGE } = require("./update-check");
 
-// 更新檢查：只提醒，不下載、不自動安裝。檢查時機＝App 每次啟動 + 每週一 10:00（台灣時間）。
+// 啟動與每週一 10:00 檢查；只有使用者同意後才下載、安裝並重新啟動。
 const UPDATE_REPO = "michelle0812/claude-codex-quota-mac";
 let updateState = {
   checking: false,
+  installing: false,
+  progress: null,
   updateAvailable: false,
   currentVersion: null,
   latestVersion: null,
@@ -28,6 +31,8 @@ let updateState = {
 };
 let updateTimer = null;
 let notifiedForVersion = null;
+let updatePromptOpen = false;
+let updateProgressWindow = null;
 
 const HIDDEN_WINDOW_RELEASE_MS = 60 * 1000;
 const SETTINGS_FILE_NAME = "widget-settings.json";
@@ -85,6 +90,7 @@ function normalizeConfig(raw) {
       height: raw.settingsWindowSize?.height || (raw.auth ? 550 : 500)
     },
     auth: raw.auth || null,
+    updater: raw.updater || null,
     // 選用，多帳號用。面板上的 ＋／－ 由這組處理（來源：profile-core.panelHooks）。
     panels: raw.panels || null,
     // 選用，多帳號用。兩種「叫回視窗」要分開，否則面板互叫會無限循環：
@@ -115,6 +121,8 @@ function startQuotaWidget(rawConfig) {
 
   app.on("second-instance", () => showWindowThen(config.onSecondInstance, "onSecondInstance"));
   app.whenReady().then(startApp);
+
+  process.on("SIGTERM", () => app.quit());
 
   app.on("before-quit", () => {
     isQuitting = true;
@@ -184,6 +192,7 @@ async function startApp() {
   createWindow();
   quotaStore.refreshNow("startup").catch(() => {});
 
+  await showPreviousUpdateFailure();
   applyAutoUpdatePreference(signalSettings.autoUpdateCheck);
 
   // 沒有 Dock 圖示也沒有選單列圖示：App 已經在跑時再從 Finder / Spotlight 打開，
@@ -195,10 +204,13 @@ async function startApp() {
 
 function broadcastUpdateState() {
   sendToWindow("update:stateChanged", updateState);
+  if (updateProgressWindow && !updateProgressWindow.isDestroyed()) {
+    updateProgressWindow.webContents.send("update:stateChanged", updateState);
+  }
 }
 
-async function runUpdateCheck({ notify } = {}) {
-  if (updateState.checking) return updateState;
+async function runUpdateCheck({ notify, manual = false } = {}) {
+  if (updateState.checking || updateState.installing || updatePromptOpen) return updateState;
   updateState = { ...updateState, checking: true, error: null };
   broadcastUpdateState();
   try {
@@ -215,9 +227,12 @@ async function runUpdateCheck({ notify } = {}) {
       lastCheckedAt: Date.now(),
       error: null
     };
-    if (available && notify && notifiedForVersion !== latest.version) {
+    broadcastUpdateState();
+    if (available && notify && (manual || notifiedForVersion !== latest.version)) {
       notifiedForVersion = latest.version;
-      showUpdateNotification(latest.version);
+      await offerUpdate(latest);
+    } else if (!available && manual) {
+      await dialog.showMessageBox({ type: "info", message: `目前已是最新版本 v${current}`, buttons: ["好"] });
     }
   } catch (error) {
     // 離線 / API 失敗：安靜記錄，不打擾使用者。
@@ -227,21 +242,71 @@ async function runUpdateCheck({ notify } = {}) {
       lastCheckedAt: Date.now(),
       error: error.message
     };
+    if (manual) await dialog.showMessageBox({ type: "error", message: "無法檢查更新", detail: error.message, buttons: ["好"] });
   }
   broadcastUpdateState();
   return updateState;
 }
 
-function showUpdateNotification(version) {
-  if (!Notification.isSupported()) return;
-  const notification = new Notification({
-    title: `${config.productName || app.getName()} 有新版本`,
-    body: `發現 v${version}，點此前往 GitHub 下載（不會自動更新）。`
-  });
-  notification.on("click", () => {
-    shell.openExternal(updateState.releaseUrl || RELEASES_PAGE(UPDATE_REPO)).catch(() => {});
-  });
-  notification.show();
+async function showPreviousUpdateFailure() {
+  if (!config.updater?.isDefault) return;
+  const file = path.join(config.updater.dataDir, "update-result.json");
+  try {
+    const result = JSON.parse(await fs.readFile(file, "utf8"));
+    await fs.unlink(file);
+    if (!result.ok) await dialog.showMessageBox({
+      type: "error", message: "上次更新未完成",
+      detail: `${result.error}\n舊版備份位置：${result.backup}`, buttons: ["好"]
+    });
+  } catch (error) {
+    if (error.code !== "ENOENT") console.warn(`讀取更新結果失敗：${error.message}`);
+  }
+}
+
+async function offerUpdate(release) {
+  if (updatePromptOpen || updateState.installing) return;
+  updatePromptOpen = true;
+  try {
+    const { response } = await dialog.showMessageBox({
+      type: "question",
+      title: "有新版本可更新",
+      message: `${config.updater?.productName || app.getName()} v${release.version} 已推出，是否立即更新？`,
+      detail: "同意後會下載新版、關閉此 App 的所有面板、替換程式並重新啟動。帳號與設定會保留。",
+      buttons: ["更新並重新啟動", "稍後"], defaultId: 0, cancelId: 1, noLink: true
+    });
+    if (response !== 0) return;
+    if (!app.isPackaged || !config.updater) throw new Error("開發模式不支援自動安裝，請使用已安裝的 App");
+    updateState = { ...updateState, installing: true, progress: "正在準備下載…", error: null };
+    updateProgressWindow = new BrowserWindow({
+      width: 400, height: 180, title: "正在更新", resizable: false, closable: false,
+      minimizable: false, alwaysOnTop: true, autoHideMenuBar: true,
+      webPreferences: { preload: config.preloadPath, nodeIntegration: false, contextIsolation: true, sandbox: true }
+    });
+    updateProgressWindow.webContents.on("did-finish-load", broadcastUpdateState);
+    await updateProgressWindow.loadFile(path.join(path.dirname(config.rendererHtmlPath), "update-progress.html"));
+    broadcastUpdateState();
+    const prepared = await prepareUpdate({
+      release, currentVersion: app.getVersion(), executable: process.execPath,
+      options: config.updater, repo: UPDATE_REPO, arch: process.arch,
+      onProgress: (progress) => { updateState = { ...updateState, progress }; broadcastUpdateState(); }
+    });
+    updateState = { ...updateState, progress: "正在安裝並重新啟動…" };
+    broadcastUpdateState();
+    await launchInstaller(prepared);
+    app.quit();
+  } catch (error) {
+    updateProgressWindow?.destroy();
+    updateProgressWindow = null;
+    updateState = { ...updateState, installing: false, progress: null, error: error.message };
+    broadcastUpdateState();
+    const { response } = await dialog.showMessageBox({
+      type: "error", message: "更新未完成，目前版本仍可繼續使用",
+      detail: error.message, buttons: ["好", "開啟發行頁"], defaultId: 0, cancelId: 0
+    });
+    if (response === 1) await shell.openExternal(RELEASES_PAGE(UPDATE_REPO));
+  } finally {
+    updatePromptOpen = false;
+  }
 }
 
 function scheduleWeeklyUpdateCheck() {
@@ -254,7 +319,7 @@ function scheduleWeeklyUpdateCheck() {
 }
 
 function applyAutoUpdatePreference(enabled) {
-  if (enabled) {
+  if (enabled && config.updater?.isDefault) {
     scheduleWeeklyUpdateCheck();
     runUpdateCheck({ notify: true }).catch(() => {});
   } else {
@@ -587,7 +652,7 @@ function registerIpcHandlers() {
   ipcMain.handle("signal:settings:reset", () => setSignalSettings(DEFAULT_WIDGET_SETTINGS));
 
   ipcMain.handle("app:version", () => app.getVersion());
-  ipcMain.handle("update:check", () => runUpdateCheck({ notify: true }));
+  ipcMain.handle("update:check", () => runUpdateCheck({ notify: true, manual: true }));
   ipcMain.handle("update:state", () => updateState);
   ipcMain.handle("update:openRelease", () =>
     shell.openExternal(updateState.releaseUrl || RELEASES_PAGE(UPDATE_REPO))

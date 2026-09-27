@@ -170,12 +170,13 @@ function renderArchBadge() {
 
 function renderUpdateState(state) {
   const s = state || {};
-  const next = s.checking ? "checking" : s.updateAvailable ? "available" : "idle";
+  const next = s.checking || s.installing ? "checking" : s.updateAvailable ? "available" : "idle";
   els.updateBtn.dataset.state = next;
-  els.updateBtn.title = s.checking
+  els.updateBtn.disabled = Boolean(s.installing);
+  els.updateBtn.title = s.installing ? s.progress || "正在更新…" : s.checking
     ? "檢查更新中…"
     : s.updateAvailable
-      ? `有新版 ${s.latestVersion}，點擊前往下載`
+      ? `有新版 ${s.latestVersion}，點擊確認更新`
       : "檢查更新";
   els.updateBtn.setAttribute("aria-label", els.updateBtn.title);
 }
@@ -1321,10 +1322,6 @@ window.quotaBridge
 els.updateBtn.addEventListener("click", async () => {
   const current = els.updateBtn.dataset.state;
   if (current === "checking") return;
-  if (current === "available") {
-    window.quotaBridge.openReleasePage().catch(reportInteractionError);
-    return;
-  }
   els.updateBtn.dataset.state = "checking";
   els.updateBtn.title = "檢查更新中…";
   try {

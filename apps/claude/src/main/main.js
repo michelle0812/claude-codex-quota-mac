@@ -53,6 +53,10 @@ async function readQuota(reason) {
 }
 
 startQuotaWidget({
+  updater: {
+    productName: "Claude 額度", assetPrefix: "ClaudeQuota", bundleId: "com.claude.usage.widget",
+    dataDir: defaultUserDataPath, isDefault: profile.id === DEFAULT_PROFILE_ID
+  },
   appIconPath: path.join(__dirname, "../../assets/app-icon.png"),
   preloadPath: path.join(__dirname, "../shared-gen/preload.js"),
   rendererHtmlPath: path.join(__dirname, "../shared-gen/renderer.html"),

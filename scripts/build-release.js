@@ -19,6 +19,7 @@
 //       npm run build-release -- --skip-build   （dist/ 已經有東西時只做組裝）
 
 const fs = require("node:fs");
+const crypto = require("node:crypto");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 
@@ -103,6 +104,13 @@ function main() {
     sh("ditto", ["-c", "-k", stage, zipPath]);
     fs.rmSync(stage, { recursive: true, force: true });
   }
+
+  // 自動更新必須先核對校驗值；與所有安裝檔一起發布。
+  const checksums = fs.readdirSync(releaseDir).sort().map((name) => {
+    const digest = crypto.createHash("sha256").update(fs.readFileSync(path.join(releaseDir, name))).digest("hex");
+    return `${digest}  ${name}`;
+  });
+  fs.writeFileSync(path.join(releaseDir, "SHA256SUMS.txt"), `${checksums.join("\n")}\n`);
 
   console.log(`\n${TAG} 完成，dist-release/ 內容：`);
   for (const name of fs.readdirSync(releaseDir).sort()) {

@@ -3,7 +3,7 @@
 // - msUntilNextWeeklySlot：算距離「下一個 星期X 時:分（某時區）」還有多少毫秒
 // - fetchLatestRelease：打 GitHub API 拿最新 release 的 tag 與網址
 //
-// 使用者要求：只提醒、不自動下載、不背景偷偷更新。這裡只負責「知道有沒有新版」。
+// 這裡只查詢版本與下載資產；安裝需由使用者同意後交給 mac-updater。
 
 "use strict";
 
@@ -92,7 +92,12 @@ function fetchLatestRelease(repo, { timeoutMs = 10_000 } = {}) {
             resolve({
               version: version.join("."),
               tag: json.tag_name,
-              url: json.html_url || RELEASES_PAGE(repo)
+              url: json.html_url || RELEASES_PAGE(repo),
+              assets: Array.isArray(json.assets) ? json.assets.map((asset) => ({
+                name: asset.name,
+                url: asset.browser_download_url,
+                size: asset.size
+              })) : []
             });
           } catch (error) {
             reject(new Error(`GitHub API 回應不是 JSON：${error.message}`));
