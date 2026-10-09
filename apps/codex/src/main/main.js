@@ -45,7 +45,7 @@ startQuotaWidget({
   preloadPath: path.join(__dirname, "../shared-gen/preload.js"),
   rendererHtmlPath: path.join(__dirname, "../shared-gen/renderer.html"),
   settingsHtmlPath: path.join(__dirname, "../shared-gen/settings.html"),
-  readQuota: () => getQuota({ authFilePath: profile.authFilePath }),
+  readQuota: () => getQuota({ authFilePath: profile.authFilePath, allowRefresh: profile.ownsAuthFile }),
   settingsWindowTitle: profile.name ? `小工具設定 · ${profile.name}` : undefined,
   settingsWindowSize: { width: 360, height: 640 },
   rendererQuery,

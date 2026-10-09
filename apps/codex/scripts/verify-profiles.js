@@ -67,6 +67,7 @@ function verifyMissingOrBrokenFile() {
     assert.equal(profile.id, DEFAULT_PROFILE_ID);
     assert.equal(profile.userDataPath, dir);
     assert.equal(profile.authFilePath, path.join(os.homedir(), ".codex", "0", "auth.json"));
+    assert.equal(profile.ownsAuthFile, true);
     assert.equal(profile.name, null);
     assert.equal(profile.accent, null);
   });
@@ -85,7 +86,27 @@ function verifyDefaultCodexHome() {
     const main = resolveProfile([], dir);
     assert.equal(main.name, "個人");
     assert.equal(main.authFilePath, path.join(os.homedir(), ".codex-1", "auth.json"));
+    assert.equal(main.ownsAuthFile, false);
     assert.deepEqual(listExtraProfileIds(dir), []);
+  });
+}
+
+// 只有「正好是面板自己的窩」（~/.codex/<id>，main 是 ~/.codex/0）才准換 token；
+// 指到 CLI 的家或其他共用目錄一律唯讀，免得輪替 refresh_token 把 CLI 踢掉。
+function verifyOwnsAuthFile() {
+  const json = JSON.stringify({
+    profiles: [
+      { id: "default", codexHome: "~/.codex" },
+      { id: "add-1", codexHome: "~/.codex/add-1" },
+      { id: "add-2", codexHome: "~/.codex-accounts/clai" },
+      { id: "add-3", codexHome: "~/.codex/add-3/" }
+    ]
+  });
+  withUserData(json, (dir) => {
+    assert.equal(resolveProfile([], dir).ownsAuthFile, false);
+    assert.equal(resolveProfile(["--profile=add-1"], dir).ownsAuthFile, true);
+    assert.equal(resolveProfile(["--profile=add-2"], dir).ownsAuthFile, false);
+    assert.equal(resolveProfile(["--profile=add-3"], dir).ownsAuthFile, true);
   });
 }
 
@@ -118,6 +139,7 @@ function verifyProfilesFile() {
     assert.equal(two.name, "工作");
     assert.equal(two.userDataPath, path.join(dir, "profiles", "2"));
     assert.equal(two.authFilePath, path.join(os.homedir(), ".codex-2", "auth.json"));
+    assert.equal(two.ownsAuthFile, false);
     assert.deepEqual(two.accent, EXTRA_PROFILE_PALETTE[0]);
 
     const three = resolveProfile(["--profile=3"], dir);
@@ -170,6 +192,7 @@ verifyExpandHome();
 verifyMissingOrBrokenFile();
 verifyProfilesFile();
 verifyDefaultCodexHome();
+verifyOwnsAuthFile();
 verifyPaletteUniqueness();
 verifyAppConfigOverride();
 

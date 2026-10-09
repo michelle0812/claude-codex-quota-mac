@@ -8,7 +8,8 @@ const {
   normalizeSnapshot,
   prettyPlan,
   whamWindow,
-  decodeJwtExpiryMs
+  decodeJwtExpiryMs,
+  TOKEN_URL
 } = require("../src/main/quota-service");
 
 function base64url(obj) {
@@ -123,15 +124,78 @@ async function verifyPerProfileAuthFile() {
   assert.equal(loginCommand(path.join(os.homedir(), ".codex-2", "auth.json")), "CODEX_HOME=~/.codex-2 codex login");
 }
 
+// 換不換 token：allowRefresh 沒給（或 false）一律唯讀，過期也不碰 auth.json；
+// allowRefresh=true 才在 access_token 快過期時 refresh 並寫回。判斷看 access_token 的 exp，
+// 不看只有 1 小時的 id_token。
+async function verifyRefreshPolicy() {
+  const now = Math.floor(Date.now() / 1000);
+  const jwt = (exp) => `${base64url({ alg: "none" })}.${base64url({ exp })}.sig`;
+  const usageBody = JSON.stringify({
+    plan_type: "plus",
+    rate_limit: { primary_window: { used_percent: 5, limit_window_seconds: 18000, reset_at: now + 3600 } }
+  });
+
+  async function run({ accessExp, idExp, allowRefresh }) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-quota-refresh-"));
+    const authFilePath = path.join(dir, "auth.json");
+    const original = JSON.stringify({
+      tokens: { id_token: jwt(idExp), access_token: jwt(accessExp), refresh_token: "old-refresh", account_id: "acct" }
+    });
+    fs.writeFileSync(authFilePath, original);
+    const calls = [];
+    const originalFetch = global.fetch;
+    global.fetch = async (url, options) => {
+      calls.push({ url, options });
+      const body = url === TOKEN_URL
+        ? JSON.stringify({ access_token: jwt(now + 864000), id_token: jwt(now + 3600), refresh_token: "new-refresh" })
+        : usageBody;
+      return { ok: true, status: 200, text: async () => body };
+    };
+    try {
+      const options = { authFilePath };
+      if (allowRefresh !== undefined) options.allowRefresh = allowRefresh;
+      await getQuota(options);
+      return { calls, original, after: fs.readFileSync(authFilePath, "utf8") };
+    } finally {
+      global.fetch = originalFetch;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  // 共用 CLI 的家（預設）：access_token 已過期也不 refresh、不寫檔，直接拿現有 token 打 usage。
+  for (const allowRefresh of [undefined, false]) {
+    const r = await run({ accessExp: now - 60, idExp: now - 60, allowRefresh });
+    assert.equal(r.calls.filter((c) => c.url === TOKEN_URL).length, 0, "唯讀模式不能打 token endpoint");
+    assert.equal(r.after, r.original, "唯讀模式不能改 auth.json");
+  }
+
+  // 面板自己的窩：access_token 過期 → refresh、寫回新 token，usage 用新的 access_token。
+  const refreshed = await run({ accessExp: now - 60, idExp: now - 60, allowRefresh: true });
+  const tokenCall = refreshed.calls.find((c) => c.url === TOKEN_URL);
+  assert.ok(tokenCall, "自己的窩過期時要 refresh");
+  assert.equal(JSON.parse(tokenCall.options.body).refresh_token, "old-refresh");
+  const saved = JSON.parse(refreshed.after);
+  assert.equal(saved.tokens.refresh_token, "new-refresh");
+  assert.ok(saved.last_refresh);
+  const usageCall = refreshed.calls.find((c) => c.url !== TOKEN_URL);
+  assert.equal(usageCall.options.headers.Authorization, `Bearer ${saved.tokens.access_token}`);
+
+  // access_token 還有效、只有 id_token 過期：不 refresh（以前看 id_token 會每小時換一次）。
+  const fresh = await run({ accessExp: now + 86400, idExp: now - 60, allowRefresh: true });
+  assert.equal(fresh.calls.filter((c) => c.url === TOKEN_URL).length, 0);
+  assert.equal(fresh.after, fresh.original);
+}
+
 (async () => {
   verifyPrettyPlan();
   verifyWhamWindow();
   verifyNormalizeFromWham();
   verifyDecodeJwtExpiry();
   await verifyPerProfileAuthFile();
+  await verifyRefreshPolicy();
 
   console.log(
-    "Verified Codex usage: plan prettify, wham window mapping, snapshot normalization, JWT expiry decode, and per-profile auth file."
+    "Verified Codex usage: plan prettify, wham window mapping, snapshot normalization, JWT expiry decode, per-profile auth file, and refresh policy."
   );
 })().catch((error) => {
   console.error(error);

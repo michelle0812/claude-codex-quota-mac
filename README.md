@@ -148,7 +148,7 @@ Claude Code ──stdin JSON──▶ usage-statusline.py ──▶ ~/.claude/us
 
 讀帳號的 `auth.json`（ChatGPT OAuth token），直接打 OpenAI 的用量 endpoint
 `https://chatgpt.com/backend-api/wham/usage` 取得 5 小時／7 天用量，不需要安裝任何 hook，
-也不需要 `codex` 指令在 PATH 上。查用量為**唯讀**：只讀現有 `access_token`，不會 refresh 或寫回 `auth.json`，因此不會輪替 token 而踢掉 Codex CLI 自身或其他共用同帳號的登入；token 新鮮度交由 Codex CLI 維持，過期時會提示重新登入（Codex 額度 v1.2.2 起；v1.2.1 仍會 refresh）。
+也不需要 `codex` 指令在 PATH 上。換不換 token 看 `auth.json` 歸誰管（Codex 額度 v1.2.2 起）：面板用自己的資料夾（`~/.codex/0`、`~/.codex/<id>`，只有面板在用）時，`access_token` 快過期（效期約 10 天）就自動 refresh 並寫回；把面板的 `codexHome` 指到 Codex CLI 的家（例如 `~/.codex` 或某個 `CODEX_HOME`）時改為**唯讀**，不 refresh、不寫回，以免輪替 token 而踢掉 CLI 的登入，token 新鮮度交由 CLI 維持（該帳號超過約 10 天沒用 CLI，面板會提示重新登入）。v1.2.1 以前一律 refresh，且看 1 小時效期的 `id_token`，約每小時換一次。
 
 ### 登入：齒輪 → 「登入 ChatGPT」
 

@@ -40,6 +40,9 @@ function resolveProfile(argv, defaultUserDataPath) {
     name: profile.name,
     userDataPath: profile.userDataPath,
     authFilePath: path.join(codexHome, "auth.json"),
+    // 只有「正好是面板自己的窩」才准換 token（同 cleanupEntry 的安全閘）；
+    // 指到別處（CLI 的 ~/.codex、CODEX_HOME 共用）一律唯讀，免得把 CLI 踢掉。
+    ownsAuthFile: path.resolve(codexHome) === path.resolve(defaultCodexHomeFor(profile.id)),
     accent: profile.accent
   };
 }
