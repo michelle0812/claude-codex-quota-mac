@@ -8,10 +8,11 @@
 // profiles.json 裡的其他帳號各帶起一份；已經在跑的會被 single-instance lock 擋掉。
 
 const path = require("node:path");
-const { app, dialog, BrowserWindow } = require("electron");
+const { app, dialog, BrowserWindow, shell } = require("electron");
 const { startQuotaWidget } = require("../shared-gen/main-core");
 const { getQuota, resolveAuthFilePath } = require("./quota-service");
 const { createCodexAuth } = require("./codex-auth-service");
+const { createBrowserUsage } = require("./browser-usage-service");
 const { DEFAULT_PROFILE_ID, resolveProfile, launchExtraProfiles, reopenHooks, panelHooks } = require("./profile");
 
 const defaultUserDataPath = app.getPath("userData");
@@ -35,6 +36,21 @@ const codexAuth = createCodexAuth({
   authFilePath: resolveAuthFilePath(profile.authFilePath),
   profileName: profile.name
 });
+const browserUsage = createBrowserUsage({ userDataPath: profile.userDataPath, profileId: profile.id });
+app.on("before-quit", () => browserUsage.destroy());
+const auth = {
+  hasSession: async () => await browserUsage.isBrowser() ? browserUsage.hasSession() : codexAuth.hasSession(),
+  login: async () => await browserUsage.isBrowser() ? browserUsage.login() : codexAuth.login(),
+  logout: async () => await browserUsage.isBrowser() ? browserUsage.logout() : codexAuth.logout(),
+  getOptions: () => browserUsage.getOptions(),
+  setOptions: (value) => browserUsage.setOptions(value),
+  openBridge: async () => {
+    const folder = app.isPackaged ? path.join(process.resourcesPath, "browser-extension") : path.resolve(__dirname, "../../../..", "browser-extension");
+    const error = await shell.openPath(folder);
+    if (error) throw new Error("無法開啟橋接擴充套件資料夾");
+    return true;
+  }
+};
 
 startQuotaWidget({
   updater: {
@@ -45,11 +61,11 @@ startQuotaWidget({
   preloadPath: path.join(__dirname, "../shared-gen/preload.js"),
   rendererHtmlPath: path.join(__dirname, "../shared-gen/renderer.html"),
   settingsHtmlPath: path.join(__dirname, "../shared-gen/settings.html"),
-  readQuota: () => getQuota({ authFilePath: profile.authFilePath, allowRefresh: profile.ownsAuthFile }),
+  readQuota: async () => await browserUsage.isBrowser() ? browserUsage.readQuota() : getQuota({ authFilePath: profile.authFilePath, allowRefresh: profile.ownsAuthFile }),
   settingsWindowTitle: profile.name ? `小工具設定 · ${profile.name}` : undefined,
-  settingsWindowSize: { width: 360, height: 640 },
+  settingsWindowSize: { width: 390, height: 780 },
   rendererQuery,
-  auth: codexAuth,
+  auth,
   // 沒有 Dock 圖示：使用者再打開 App 時，不管 macOS 通知到哪一份，所有帳號的面板都叫回來。
   ...reopenHooks(app, profile, defaultUserDataPath),
   // 標題列的 ＋／－：新增／移除面板。

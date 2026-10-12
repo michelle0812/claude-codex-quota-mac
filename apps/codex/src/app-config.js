@@ -30,6 +30,7 @@ window.APP_CONFIG = {
 
   // 設定視窗（齒輪）的帳號區塊：App 內登入 ChatGPT，每個面板各登各的帳號。
   auth: {
+    browserChoice: true,
     label: "ChatGPT 帳號",
     checkingText: "檢查登入狀態中…",
     loggedInText: "已登入：面板顯示這個帳號的 Codex 用量",

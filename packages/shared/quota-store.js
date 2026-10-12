@@ -90,6 +90,18 @@ class QuotaStore extends EventEmitter {
     return JSON.parse(JSON.stringify(this.state));
   }
 
+  async resetAccount() {
+    // Let the old account's read finish before discarding its data and history.
+    if (this.inFlight) await this.inFlight;
+    this.clearTimer();
+    this.history = [];
+    this.failureCount = 0;
+    this.state = { status: "loading", quota: null, error: null, fromCache: false,
+      refreshing: false, lastUpdatedAt: null, nextRefreshAt: null };
+    await Promise.all([this.cachePath, this.historyPath].map((file) => fs.rm(file, { force: true })));
+    this.emitState();
+  }
+
   setWindowVisible(value) {
     this.windowVisible = Boolean(value);
     this.scheduleNextRefresh();

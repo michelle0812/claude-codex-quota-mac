@@ -40,6 +40,9 @@ contextBridge.exposeInMainWorld("quotaBridge", {
   setSignalSettings: (settings) => ipcRenderer.invoke("signal:settings:set", settings),
   resetSignalSettings: () => ipcRenderer.invoke("signal:settings:reset"),
   getAuthStatus: () => ipcRenderer.invoke("auth:status"),
+  getAuthOptions: () => ipcRenderer.invoke("auth:options:get"),
+  setAuthOptions: (value) => ipcRenderer.invoke("auth:options:set", value),
+  openBrowserBridge: () => ipcRenderer.invoke("auth:bridge:open"),
   login: () => ipcRenderer.invoke("auth:login"),
   logout: () => ipcRenderer.invoke("auth:logout"),
   // 「＋」的命名視窗（panel-name.html）專用。其他視窗用不到這一區。

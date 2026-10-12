@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Codex 額度瀏覽器橋接",
+  "version": "0.1.0",
+  "description": "將目前 ChatGPT 帳號的用量傳回本機 Codex 額度面板，不傳送登入憑證。",
+  "permissions": ["storage", "alarms"],
+  "host_permissions": ["https://chatgpt.com/*", "http://127.0.0.1/*"],
+  "background": {"service_worker": "background.js"},
+  "content_scripts": [
+    {"matches": ["http://127.0.0.1/*"], "js": ["pair.js"]},
+    {"matches": ["https://chatgpt.com/*"], "js": ["usage.js"]}
+  ]
+}

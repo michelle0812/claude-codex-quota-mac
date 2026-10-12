@@ -1,0 +1,13 @@
+"use strict";
+const fs = require("node:fs");
+const path = require("node:path");
+const root = path.resolve(__dirname, "..");
+const source = path.join(root, "browser-extension/chromium");
+const target = path.join(root, "browser-extension/firefox");
+fs.mkdirSync(target, { recursive: true });
+for (const name of ["background.js", "pair.js", "usage.js"]) fs.copyFileSync(path.join(source, name), path.join(target, name));
+const manifest = JSON.parse(fs.readFileSync(path.join(source, "manifest.json"), "utf8"));
+manifest.background = { scripts: ["background.js"] };
+manifest.browser_specific_settings = { gecko: { id: "codex-quota-bridge@local", strict_min_version: "128.0", data_collection_permissions: { required: ["none"] } } };
+fs.writeFileSync(path.join(target, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
+console.log("Generated Firefox/Zen extension from shared Chromium/Safari sources.");

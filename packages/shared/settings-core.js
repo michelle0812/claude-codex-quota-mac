@@ -135,11 +135,53 @@ function buildAuthField(auth) {
   els.authStatus = status;
   els.authLoginBtn = loginBtn;
   els.authLogoutBtn = logoutBtn;
+  if (auth.browserChoice) buildBrowserChoice(section);
+}
+
+let browserOptions = null;
+function buildBrowserChoice(section) {
+  const controls = document.createElement("div");
+  controls.className = "browser-choice";
+  controls.innerHTML = '<label for="quotaSource">用量來源</label><select id="quotaSource"><option value="codex">Codex 登入</option><option value="browser">瀏覽器登入</option></select><label for="quotaBrowser">此面板使用的瀏覽器</label><select id="quotaBrowser"></select><p class="hint" id="quotaBrowserHint"></p>';
+  section.prepend(controls);
+  const source = controls.querySelector("#quotaSource");
+  const browser = controls.querySelector("#quotaBrowser");
+  const bridgeButton = document.createElement("button");
+  bridgeButton.type = "button"; bridgeButton.className = "secondary";
+  bridgeButton.textContent = "開啟橋接擴充套件與說明";
+  bridgeButton.addEventListener("click", () => window.quotaBridge.openBrowserBridge().catch(showError));
+  controls.append(bridgeButton);
+  function render(value) {
+    browserOptions = value;
+    source.value = value.source;
+    browser.replaceChildren(...value.browsers.map((b) => {
+      const option = document.createElement("option"); option.value = b.id;
+      option.textContent = b.name + (b.installed ? "" : "（未安裝）"); return option;
+    }));
+    browser.value = value.browser; browser.disabled = value.source !== "browser";
+    bridgeButton.hidden = value.source !== "browser";
+    controls.querySelector("#quotaBrowserHint").textContent = value.source === "browser"
+      ? '選擇會立即儲存，只影響此面板。請先安裝用量橋接擴充套件；登入後保持瀏覽器開啟。' : '讀取此面板的 Codex 登入檔。';
+  }
+  async function change() {
+    source.disabled = browser.disabled = true;
+    try {
+      render(await window.quotaBridge.setAuthOptions({ source: source.value, browser: browser.value }));
+      renderAuthStatus(await window.quotaBridge.getAuthStatus());
+      els.statusText.textContent = "已儲存此面板的登入方式";
+    } catch (error) { if (browserOptions) render(browserOptions); showError(error); }
+    finally { source.disabled = false; browser.disabled = source.value !== "browser"; }
+  }
+  source.disabled = browser.disabled = true;
+  window.quotaBridge.getAuthOptions().then(render).then(() => { source.disabled = false; }).catch(showError);
+  source.addEventListener("change", change); browser.addEventListener("change", change);
 }
 
 function renderAuthStatus(loggedIn) {
   const auth = APP_CONFIG.auth;
-  els.authStatus.textContent = loggedIn ? auth.loggedInText : auth.loggedOutText;
+  els.authStatus.textContent = browserOptions?.source === "browser"
+    ? (loggedIn ? `已連線：${browserOptions.email || "瀏覽器帳號"}` : "尚未連線：按登入 ChatGPT 連接此瀏覽器")
+    : (loggedIn ? auth.loggedInText : auth.loggedOutText);
   els.authLoginBtn.hidden = loggedIn;
   els.authLogoutBtn.hidden = !loggedIn;
 }
@@ -147,9 +189,12 @@ function renderAuthStatus(loggedIn) {
 async function login() {
   const auth = APP_CONFIG.auth;
   els.authLoginBtn.disabled = true;
-  els.authStatus.textContent = auth.loginPendingText;
+  const choices = document.querySelectorAll(".browser-choice select");
+  choices.forEach((select) => { select.disabled = true; });
+  els.authStatus.textContent = browserOptions?.source === "browser" ? "請在選定瀏覽器完成橋接並登入 ChatGPT（2 分鐘內）…" : auth.loginPendingText;
   try {
-    await window.quotaBridge.login();
+    const result = await window.quotaBridge.login();
+    if (browserOptions && result?.email) browserOptions.email = result.email;
     renderAuthStatus(true);
     els.statusText.textContent = auth.loginDoneText;
   } catch (error) {
@@ -157,6 +202,7 @@ async function login() {
     showError(error);
   } finally {
     els.authLoginBtn.disabled = false;
+    choices.forEach((select) => { select.disabled = select.id === "quotaBrowser" && browserOptions?.source !== "browser"; });
   }
 }
 
