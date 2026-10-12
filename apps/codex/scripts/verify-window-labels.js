@@ -1,0 +1,14 @@
+const assert = require("node:assert/strict");
+const { windowLabels } = require("../../../packages/shared/window-labels");
+const plus = { primary: { windowDurationMins: 300 }, secondary: { windowDurationMins: 10080 } };
+assert.equal(windowLabels(plus).secondary, "本週");
+assert.equal(windowLabels(plus).primary, "5小時");
+const free = { primary: null, secondary: { windowDurationMins: 43200 } };
+assert.equal(windowLabels(free).secondary, "本月");
+assert.equal(windowLabels(free).pace, "30天節奏");
+assert.equal(windowLabels(free).longAbbreviation, "30d");
+assert.equal(windowLabels(free, "en").secondary, "30-day window");
+assert.equal(windowLabels(free, "en").pace, "30-day pace");
+assert.equal(windowLabels(null).secondary, "本週");
+assert.equal(windowLabels({ secondary: { windowDurationMins: 20160 } }).secondary, "14天");
+console.log("Verified monthly Free, weekly Plus, compact and bilingual window labels.");

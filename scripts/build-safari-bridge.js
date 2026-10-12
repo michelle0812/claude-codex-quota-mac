@@ -19,12 +19,13 @@ async function main() {
     `PRODUCT_BUNDLE_IDENTIFIER = ${match.includes(".Extension") ? bundle + ".Extension" : bundle};`);
   await fs.writeFile(pbx, fixed);
   const derived = path.join(temp, "build");
-  execFileSync("/usr/bin/xcodebuild", ["-quiet", "-project", project, "-scheme", name, "-configuration", "Debug", "-derivedDataPath", derived,
+  execFileSync("/usr/bin/xcodebuild", ["-quiet", "-project", project, "-scheme", name, "-configuration", "Release", "-derivedDataPath", derived,
+    "-arch", "arm64", "-arch", "x86_64", "ONLY_ACTIVE_ARCH=NO", "MACOSX_DEPLOYMENT_TARGET=13.0",
     "CODE_SIGN_IDENTITY=-", "CODE_SIGNING_ALLOWED=YES", "CODE_SIGNING_REQUIRED=NO", "DEVELOPMENT_TEAM=", "build"], { stdio: "inherit" });
   const target = path.join(root, "browser-extension/safari", `${name}.app`);
   await fs.mkdir(path.dirname(target), { recursive: true });
   await fs.rm(target, { recursive: true, force: true });
-  await fs.cp(path.join(derived, "Build/Products/Debug", `${name}.app`), target, { recursive: true });
+  await fs.cp(path.join(derived, "Build/Products/Release", `${name}.app`), target, { recursive: true });
   console.log(`Built ad-hoc Safari preview: ${target}. Not installed; Safari enablement/signing still requires review.`);
 }
 main().catch((error) => { console.error(error.message); process.exitCode = 1; });

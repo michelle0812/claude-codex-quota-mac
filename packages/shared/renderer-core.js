@@ -362,7 +362,10 @@ for (const [lang, overrides] of Object.entries(APP_CONFIG.copy || {})) {
 }
 
 function t(path) {
-  return path.split(".").reduce((value, key) => value?.[key], copy[state.lang]) ?? path;
+  const value = path.split(".").reduce((value, key) => value?.[key], copy[state.lang]) ?? path;
+  if (!path.startsWith("reason.")) return value;
+  const days = window.QuotaWindowLabels.windowLabels(state.quota, state.lang).longDays;
+  return value.replace(/7-day/g, `${days}-day`).replace(/7天/g, `${days}天`);
 }
 
 function setText(element, value) {
@@ -464,13 +467,17 @@ function statusClassFromRemaining(remainingPercent) {
 }
 
 function renderStaticCopy() {
+  const labels = window.QuotaWindowLabels.windowLabels(state.quota, state.lang);
   setText(els.brandName, t("brand"));
   setText(els.remainingLabel, t("remaining"));
-  setText(els.primaryLabel, t("primary"));
-  setText(els.secondaryLabel, t("secondary"));
+  setText(els.primaryLabel, labels.primary);
+  setText(els.secondaryLabel, labels.secondary);
   setText(els.planLabel, t("plan"));
   setText(els.paceTitle, t("paceTitle"));
-  setText(els.weeklyPaceLabel, t("weeklyPace"));
+  setText(els.weeklyPaceLabel, labels.pace);
+  document.querySelector(".pace-metrics").setAttribute("aria-label", labels.pace);
+  document.querySelectorAll(".compact-metric-weekly .compact-metric-label, .compact-reset-weekly > strong").forEach((el) => setText(el, labels.longAbbreviation));
+  document.querySelectorAll(".compact-metric-short .compact-metric-label, .compact-reset-short > strong").forEach((el) => setText(el, labels.shortAbbreviation));
   setText(els.actualPaceLabel, t("actualRemaining"));
   setText(els.idealPaceLabel, t("idealRemaining"));
   setText(els.velocityPaceLabel, t("velocityRemaining"));
