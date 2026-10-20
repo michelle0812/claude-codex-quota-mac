@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="zh-TW"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'"><title>Google 額度設定</title><link rel="stylesheet" href="settings.css"></head>
+<body><main>
+  <h1>Google 額度</h1><p class="intro">點擊圓球切換三組 AGY 用量，顯示 <span>/usage</span> 對應的已用比例。</p>
+  <section><label>AGY 帳號</label><p id="account">正在檢查連接…</p><div class="actions"><button id="connect">連接本機 AGY</button><button id="disconnect" class="secondary" hidden>中斷連接</button></div></section>
+  <section class="preferences"><label for="refreshMinutes">自動重新整理</label><select id="refreshMinutes"><option value="1">每 1 分鐘</option><option value="3">每 3 分鐘</option><option value="5">每 5 分鐘</option><option value="10">每 10 分鐘</option><option value="30">每 30 分鐘</option></select></section>
+  <label class="check"><input id="autoUpdate" type="checkbox">自動檢查版本更新</label>
+  <p id="message" role="status"></p><footer><button id="done" class="secondary">完成</button></footer>
+</main><script src="settings.js"></script></body></html>

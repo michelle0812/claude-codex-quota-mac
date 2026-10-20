@@ -36,7 +36,7 @@ async function connect(target) {
     const request = ++id; pending.set(request, { resolve, reject }); socket.send(JSON.stringify({ id: request, method, params }));
   });
   await send("Runtime.enable");
-  return { errors, close: () => socket.close(), eval: async expression => {
+  return { errors, close: () => socket.close(), capture: async () => (await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false })).data, eval: async expression => {
     const result = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
     if (result.exceptionDetails) throw Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
     return result.result.value;
@@ -52,9 +52,9 @@ async function smoke(bundle) {
     await fs.writeFile(tokenFile, tokenBytes, { mode: 0o600 });
     const { accountId } = await readCredential(tokenFile);
     await fs.writeFile(path.join(directory, "agy-account.json"), JSON.stringify({ version: 1, tokenFile, accountId, group: "gemini" }));
-    await fs.writeFile(path.join(directory, "widget-settings.json"), JSON.stringify({ autoUpdateCheck: false }));
+    await fs.writeFile(path.join(directory, "widget-settings.json"), JSON.stringify({ signal: { autoUpdateCheck: false } }));
     const wrapper = path.join(directory, "test-main.cjs");
-    const fixture = path.resolve(__dirname, "fixtures/quota-summary.json");
+    const fixture = path.resolve(__dirname, "fixtures/usage.json");
     await fs.writeFile(wrapper, `
 const {app,BrowserWindow,dialog}=require('electron');
 app.setPath('userData',${JSON.stringify(directory)});
@@ -70,15 +70,19 @@ scopedExec[util.promisify.custom]=async(command,args,options)=>{
   if(JSON.stringify(args)!==JSON.stringify(['find-generic-password','-s','gemini','-a','antigravity','-w'])) throw Error('Unexpected Keychain access');
   return {stdout:'go-keyring-base64:'+Buffer.from(${JSON.stringify(tokenBytes)}).toString('base64')};
  }
+ if(command===${JSON.stringify(path.join(os.homedir(), ".local/bin/agy"))}){
+  if(JSON.stringify(args)!==JSON.stringify(['-p','/usage','--output-format','json'])) throw Error('Unexpected AGY command');
+  const document=JSON.parse(JSON.stringify(require(${JSON.stringify(fixture)})));
+  for(const group of document.command.data.groups) for(const bucket of group.buckets) {
+   bucket.reset_time=new Date(Date.now()+(bucket.window==='5h'?2.5*3600000:6.8*86400000)).toISOString();
+  }
+  return {stdout:JSON.stringify(document)};
+ }
  return originalRun(command,args,options);
 };
 cp.execFile=scopedExec;
 
-globalThis.fetch=async(url)=>{
- if(url.endsWith(':loadCodeAssist')) return new Response(JSON.stringify({cloudaicompanionProject:'smoke-project',paidTier:{name:'Smoke plan'}}));
- if(url.endsWith(':retrieveUserQuotaSummary')) return new Response(JSON.stringify(require(${JSON.stringify(fixture)})));
- throw Error('Unexpected network request in smoke test');
-};
+globalThis.fetch=async()=>{throw Error('Unexpected web API request in isolated CLI test');};
 app.whenReady().then(()=>{ const timer=setTimeout(()=>app.quit(),30000);timer.unref(); });
 require(${JSON.stringify(path.join(bundle, "Contents/Resources/app.asar/src/main/main.js"))});
 `);
@@ -112,25 +116,55 @@ require(${JSON.stringify(path.join(bundle, "Contents/Resources/app.asar/src/main
     const main = await connect(mainTarget); clients.push(main);
     const getState = () => main.eval("window.quotaBridge.getQuotaState()");
     const initial = await until(async () => { const s = await getState(); return s.status === "ready" && s; }, "Initial quota did not become ready");
-    assert.equal(initial.quota.limitId, "google:gemini"); assert.equal(initial.quota.primary.usedPercent, 10);
+    await until(() => main.eval("document.readyState === 'complete' && document.querySelector('#quotaGroupName')?.textContent === 'Gemini Models'"), "Group selector did not finish loading");
+    assert.equal(initial.quota.limitId, "google:all"); assert.equal(initial.quota.source, "agy-cli");
+    assert.equal(initial.quota.groups.length, 3);
+    assert.deepEqual(await main.eval("[innerWidth,innerHeight]"), [390,336]);
+    const previewPaths = [];
+    for (const group of initial.quota.groups) {
+      assert.equal(await main.eval("document.querySelector('#quotaGroupName').textContent"), group.name);
+      const values = await main.eval("['primaryText','secondaryText'].map(id=>document.getElementById(id).textContent)");
+      for (const [i, window] of [group.primary,group.secondary].entries()) {
+        if (window) assert.ok(values[i].startsWith(window.usedPercent.toFixed(2)+'%'), values[i]);
+        else assert.equal(values[i], '未提供');
+      }
+      assert.equal(await main.eval("document.querySelector('#remaining').textContent"), (group.primary || group.secondary).usedPercent.toFixed(2)+'%');
+      assert.equal(await main.eval("document.querySelector('#paceBadge').textContent"), await main.eval("t('status.'+state.quota.paceAdvice.overall.status)"));
+      assert.ok(await main.eval("['paceTitle','quotaGroupName','paceBadge'].map(id=>document.getElementById(id).getBoundingClientRect()).every((r,i,a)=>r.right<=innerWidth && r.left>=0 && (!i || r.left>=a[i-1].right))"), 'Heading overlaps');
+      assert.ok(await main.eval("document.querySelector('footer').getBoundingClientRect().bottom <= innerHeight"));
+      await sleep(500);
+      const preview = path.resolve(__dirname, `../dist/google-orb-${group.id}-preview.png`);
+      await fs.writeFile(preview, Buffer.from(await main.capture(), 'base64')); previewPaths.push(preview);
+      await main.eval("document.querySelector('#liquidMeter').click();true");
+    }
+    assert.equal(await main.eval("document.querySelector('#quotaGroupName').textContent"), 'Gemini Models');
+    assert.equal((await getState()).quota.fetchedAt, initial.quota.fetchedAt, 'Switching must not fetch quota');
+    await main.eval("document.querySelector('#liquidMeter').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));true");
+    assert.equal(await main.eval("document.querySelector('#quotaGroupName').textContent"), 'Claude and GPT Models');
+    await main.eval("window.quotaBridge.refreshQuota()");
+    assert.equal(await main.eval("document.querySelector('#quotaGroupName').textContent"), 'Claude and GPT Models');
+    await main.eval("location.reload();true");
+    await until(() => main.eval("document.readyState === 'complete' && document.querySelector('#quotaGroupName')?.textContent === 'Claude and GPT Models'"), 'Group selection did not survive reload');
+    await main.eval("renderQuotaState({...state.snapshot,status:'error',error:{message:'測試更新失敗'}});document.querySelector('#liquidMeter').click();true");
+    assert.ok(await main.eval("document.querySelector('#statusText').textContent.includes('測試更新失敗')"));
+    assert.equal(await main.eval("document.querySelector('#primaryText').textContent"), '未提供');
+    await main.eval("document.querySelector('#liquidMeter').dispatchEvent(new KeyboardEvent('keydown',{key:' ',bubbles:true}));true");
+    assert.equal(await main.eval("document.querySelector('#quotaGroupName').textContent"), 'Gemini Models');
+    console.log('Orb previews (synthetic test data):', previewPaths.join(', '));
     await main.eval("window.quotaBridge.openSettings()");
     const settingsTarget = await until(async () => (await targets()).find(t => t.url.includes("settings.html")), "Settings not loaded");
     const settings = await connect(settingsTarget); clients.push(settings);
-    await until(() => settings.eval("document.querySelector('#quotaGroup')?.options.length === 2 && !document.querySelector('#quotaGroup').disabled"), "Quota group selector unavailable");
-    assert.equal(await settings.eval("document.querySelector('#quotaGroup').value"), "gemini");
-    assert.equal(await settings.eval("[...document.querySelectorAll('#authField button')].find(b=>b.textContent==='中斷連接')?.hidden"), false);
-    assert.ok(await settings.eval("document.querySelector('#authField').textContent.includes('smoke@example.test')"));
-    await settings.eval("document.querySelector('#quotaGroup').value='third-party';document.querySelector('#quotaGroup').dispatchEvent(new Event('change',{bubbles:true}));true");
-    const changed = await until(async () => { const s = await getState(); return s.status === "ready" && s.quota?.limitId === "google:third-party" && s; }, "Group change did not reach the quota reader");
-    assert.equal(changed.quota.primary.usedPercent, 60); assert.equal(changed.quota.secondary.usedPercent, 80);
-    await settings.eval("[...document.querySelectorAll('#authField button')].find(b=>b.textContent==='中斷連接').click();true");
-    await until(async () => { const s = await getState(); return s.status === "error" && s.quota === null; }, "Disconnect kept old quota");
-    await settings.eval("[...document.querySelectorAll('#authField button')].find(b=>b.textContent==='連接 AGY 帳號').click();true");
-    await until(async () => { const s = await getState(); return s.status === "ready" && s.quota?.limitId === "google:third-party"; }, "Reconnect did not restore the chosen group");
+    await until(() => settings.eval("document.querySelector('#account')?.textContent.includes('smoke@example.test')"), "Account settings not ready");
+    assert.equal(await settings.eval("document.querySelector('#disconnect').hidden"), false);
+    assert.equal(await settings.eval("document.querySelector('#quotaGroup') === null"), true);
+    await settings.eval("document.querySelector('#disconnect').click();true");
+    await until(async () => { const state = await getState(); return state.status === "error" && state.quota === null; }, "Disconnect kept old quota");
+    await settings.eval("document.querySelector('#connect').click();true");
+    await until(async () => { const state = await getState(); return state.status === "ready" && state.quota?.groups?.length === 3; }, "Reconnect did not restore three groups");
     assert.equal(JSON.parse(await fs.readFile(path.join(directory, "agy-account.json"), "utf8")).keychainAccount, "antigravity");
     assert.equal(await fs.readFile(tokenFile, "utf8"), tokenBytes);
     assert.deepEqual(main.errors, []); assert.deepEqual(settings.errors, []);
-    console.log("Verified packaged Google UI: preload, authenticated startup, group selector, IPC quota switch, disconnect clears quota, reconnect, and no renderer exceptions.");
+    console.log("Verified packaged Google orb: original 390×336 size, cyclic mouse/keyboard selection, per-group percentages/reset/pace, missing Argon 5h, persistence after refresh/reload, stale error preservation, settings and disconnect/reconnect, no heading overlap or renderer errors.");
   } catch (error) {
     throw new Error(`${error.message}\nElectron output: ${stderr}`);
   } finally {

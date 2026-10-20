@@ -1529,3 +1529,12 @@ body[data-view="compact"] .status {
 body[data-view="compact"] .compact-shell {
   display: block;
 }
+
+/* Opt-in Google model group selector, within the existing panel dimensions. */
+.quota-group-name { min-width: 0; font-size: 9px; color: #b8cbef; white-space: nowrap; }
+.quota-group-name[hidden] { display: none; }
+body[data-quota-groups="true"] .pace-heading { gap: 5px; }
+body[data-quota-groups="true"] .pace-heading > :first-child { flex-shrink: 0; }
+body[data-quota-groups="true"] .pace-badge { flex-shrink: 0; }
+body[data-quota-groups="true"] .liquid-meter { cursor: pointer; -webkit-app-region: no-drag; }
+body[data-quota-groups="true"] .liquid-meter:focus-visible { outline: 2px solid #8ab4ff; outline-offset: 3px; }

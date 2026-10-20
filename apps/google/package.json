@@ -1,7 +1,7 @@
 {
   "name": "google-quota-mac",
-  "version": "1.2.3",
-  "description": "macOS AGY 帳號用量面板，分開監看 Gemini 與 Claude / GPT 的 5 小時、每週額度。",
+  "version": "1.2.4",
+  "description": "macOS AGY 額度圓球面板，點擊切換 Gemini Models、Claude and GPT Models、Gemini 4 Argon 三組額度。",
   "main": "src/main/main.js",
   "author": "michelle0812 and Google Usage Widget contributors",
   "license": "MIT",

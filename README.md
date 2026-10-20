@@ -7,7 +7,7 @@
 |---|---|---|---|
 | **Claude 額度** | Claude Code 用量，**支援多個 claude.ai 帳號各一個面板** | 本機 statusLine hook，或登入 claude.ai 讀帳號級別用量 | `/Applications/Claude 額度.app` |
 | **Codex 額度** | Codex（ChatGPT 訂閱）用量，**支援多個帳號各一個面板** | 在齒輪裡登入 ChatGPT（或沿用 `codex login` 的 `~/.codex/auth.json`），直接打 OpenAI 用量 API | `/Applications/Codex 額度.app` |
-| **Google 額度** | Google (Antigravity / Gemini) 用量，**支援多帳號各一個面板** | 唯讀連接 AGY 憑證，直接查詢 Google 額度 API；可選 Gemini 或 Claude / GPT 群組 | `/Applications/Google 額度.app` |
+| **Google 額度** | Google (Antigravity / Gemini) 用量，**支援多帳號各一個面板** | 官方 AGY CLI `/usage` JSON；點擊圓球切換三組用量 | `/Applications/Google 額度.app` |
 
 > [!IMPORTANT]
 > **這些 App 還沒有 Apple 公證（notarization）**，所以第一次開啟會被 Gatekeeper 擋下來，
@@ -197,23 +197,29 @@ OpenAI 未公開介面，改版即可能失效；失效時在齒輪裡重新登�
 
 ---
 
-## Google 額度：運作方式
+## Google 額度：圓球切換模型群組
 
-在齒輪中按「連接 AGY 帳號」→「連接本機 AGY」，直接讀取 macOS 鑰匙圈中的
-AGY 登入（`gemini / antigravity`）。macOS 若要求存取，請允許。這是連接現有 AGY 登入，
-不是另外開 Google OAuth 登入。App 不複製、刷新、修改或刪除 AGY 憑證。
-登入到期時，請先在 AGY 更新登入，再回面板重新整理。
+Google 維持原本面板尺寸與圓球，點擊圓球依序循環切換三組；群組名稱顯示在「使用節奏建議」與節奏狀態之間：
 
-「額度群組」可選 **Gemini** 或 **Claude / GPT**。兩組各自有 5 小時及每週額度，
-不能混用。資料直接來自 Google `loadCodeAssist` 與 `retrieveUserQuotaSummary`；
-這是未公開介面，變更或無法解析時會顯示錯誤，不拿上下文使用率、本機 statusLine
-或別組額度替代。
+- **Gemini Models**：5hr 與 weekly。
+- **Claude and GPT Models**：獨立的 5hr 與 weekly。
+- **Gemini 4 Argon**：獨立的 weekly；AGY 未提供的 5hr 顯示「未提供」。
 
-每個面板獨立儲存登入來源、帳號識別與群組。新增面板預設未連接，須個別連接。
-若使用自行管理的憑證檔，可選「選擇其他憑證檔」；預設檔案位置為
-`~/.gemini/antigravity-cli/antigravity-oauth-token`，但 macOS 的正常登入通常只存鑰匙圈，沒有此檔。憑證換成另一個帳號時，原面板會停止讀取並要求重新連接；
-不會跟著全域帳號切換。中斷連接只移除此面板的綁定，不登出 AGY。
-連接帳號或變更群組時，會清除面板的舊額度與歷史，避免混用。
+沿用原版的**已用**百分比，保留兩位小數（100 減去 AGY `/usage` 的剩餘比例）。
+兩個視窗顯示各自的重置倒數。切換僅選取現有資料，不額外查詢 AGY；記住上次選擇的群組。
+缺少的額度不補成 0，不與其他群組共用數據；節奏建議依目前群組計算。
+
+請先安裝並登入官方 AGY CLI（已用 1.4.3 驗證），再在齒輪設定按「連接本機 AGY」。
+App 用 macOS 鑰匙圈的 AGY 項目確認帳號，並呼叫本機
+`~/.local/bin/agy -p /usage --output-format json` 讀取三組數據。
+登入與憑證更新由 AGY 自己管理；面板不匯出、複製或寫入憑證。
+舊的網頁 API 快取會清除，不再把另一個額度範圍的數字當成 AGY 用量。
+
+面板各自綁定帳號。本機 AGY 換帳號時，原面板會停止顯示新的帳號數據，直到重新連接。
+舊有憑證檔綁定也必須與本機 AGY 帳號一致；目前不支援讓 CLI 同時查多個不同帳號。
+
+讀取失敗時會明確標示錯誤；若保留上次資料，會顯示更新錯誤。
+連接或中斷帳號時會清除面板舊資料，避免混用。
 
 `node scripts/install-google-app.js --stage-only` 只會用 electron-builder 建置並驗證
 新的 App，輸出至獨立暫存建置目錄；不會替換 `/Applications` 的現有 App。

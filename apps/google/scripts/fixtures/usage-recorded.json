@@ -1,0 +1,64 @@
+{
+  "status": "SUCCESS",
+  "num_turns": 0,
+  "command": {
+    "name": "usage",
+    "data": {
+      "groups": [
+        {
+          "name": "Gemini Models",
+          "description": "Models within this group: Gemini Flash, Gemini Pro",
+          "buckets": [
+            {
+              "id": "gemini-weekly",
+              "name": "Weekly Limit Remaining",
+              "window": "weekly",
+              "remaining_fraction": 0.9845516681671143,
+              "reset_time": "2026-10-27T08:50:45Z"
+            },
+            {
+              "id": "gemini-5h",
+              "name": "Five Hour Limit Remaining",
+              "window": "5h",
+              "remaining_fraction": 0.9459308385848999,
+              "reset_time": "2026-10-20T13:50:45Z"
+            }
+          ]
+        },
+        {
+          "name": "Claude and GPT models",
+          "description": "Models within this group: Claude Opus, Claude Sonnet, GPT-OSS",
+          "buckets": [
+            {
+              "id": "3p-weekly",
+              "name": "Weekly Limit Remaining",
+              "window": "weekly",
+              "remaining_fraction": 1,
+              "reset_time": "2026-10-27T11:35:15Z"
+            },
+            {
+              "id": "3p-5h",
+              "name": "Five Hour Limit Remaining",
+              "window": "5h",
+              "remaining_fraction": 1,
+              "reset_time": "2026-10-20T16:35:15Z"
+            }
+          ]
+        },
+        {
+          "name": "Gemini 4 Argon",
+          "description": "For paid Pro plans, Argon quota is separate. Higher Argon quota (included as part of the larger Gemini quota bucket) is available on Ultra plans.",
+          "buckets": [
+            {
+              "id": "gemini-argon-wtu-weekly",
+              "name": "Gemini 4 Argon Weekly Limit",
+              "window": "weekly",
+              "remaining_fraction": 0.5158501267433167,
+              "reset_time": "2026-10-27T08:48:37Z"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

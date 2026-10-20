@@ -26,20 +26,13 @@ if (!isDefaultProfile) {
 }
 
 const accountService = createAccountService({
-  selectSource: async ({ defaultPath }) => {
+  selectSource: async () => {
     const choice = await dialog.showMessageBox({
-      type: "question", title: "連接 AGY 帳號", message: "使用哪個 AGY 登入？",
-      detail: "本機已登入 AGY 時，直接連接即可，不用尋找或匯出憑證檔。其他帳號可選擇自己的憑證檔。",
-      buttons: ["連接本機 AGY", "選擇其他憑證檔", "取消"], defaultId: 0, cancelId: 2, noLink: true
+      type: "question", title: "連接 AGY 帳號", message: "連接本機已登入的 AGY？",
+      detail: "點擊圓球切換 Gemini Models、Claude and GPT Models、Gemini 4 Argon 的用量。",
+      buttons: ["連接本機 AGY", "取消"], defaultId: 0, cancelId: 1, noLink: true
     });
-    if (choice.response === 2) return null;
-    if (choice.response === 0) return { type: "keychain" };
-    const result = await dialog.showOpenDialog({
-      title: "連接此面板的 AGY 帳號", buttonLabel: "連接 AGY",
-      defaultPath, properties: ["openFile", "showHiddenFiles"],
-      message: "選擇已登入 AGY 的憑證檔。此面板只讀取檔案，不會更動 AGY 的登入。"
-    });
-    return result.canceled ? null : { type: "file", path: result.filePaths[0] };
+    return choice.response === 0 ? { type: "keychain" } : null;
   }
 });
 
@@ -54,10 +47,11 @@ startQuotaWidget({
   appIconPath: path.join(__dirname, "../../assets/app-icon.png"),
   preloadPath: path.join(__dirname, "../shared-gen/preload.js"),
   rendererHtmlPath: path.join(__dirname, "../shared-gen/renderer.html"),
-  settingsHtmlPath: path.join(__dirname, "../shared-gen/settings.html"),
+  settingsHtmlPath: path.join(__dirname, "../renderer/settings.html"),
   readQuota: () => accountService.getQuota(),
+  panelNameHtmlPath: path.join(__dirname, "../shared-gen/panel-name.html"),
   settingsWindowTitle: profile.name ? `小工具設定 · ${profile.name}` : undefined,
-  settingsWindowSize: { width: 400, height: 720 },
+  settingsWindowSize: { width: 390, height: 380 },
   rendererQuery: profile.name || profile.accent || !isDefaultProfile
     ? { name: profile.name, accent: profile.accent, extra: !isDefaultProfile }
     : undefined,

@@ -24,6 +24,7 @@ function createAccountService({ selectSource, selectFile, readToken = readCreden
   return {
     async configure(userDataPath) {
       directory = userDataPath;
+      binding = { version: 1, tokenFile: null, keychainAccount: null, accountId: null, group: "gemini" };
       let valid = false;
       try {
         const data = JSON.parse(await fs.readFile(configurationFile(), "utf8"));
@@ -50,7 +51,7 @@ function createAccountService({ selectSource, selectFile, readToken = readCreden
           const credential = await readToken(sourceFor(binding));
           if (credential.accountId !== binding.accountId) throw new Error("account changed");
           const cache = JSON.parse(await fs.readFile(path.join(directory, "quota-cache.json"), "utf8"));
-          if (cache?.quota?.account?.id !== binding.accountId || cache?.quota?.limitId !== `google:${binding.group}`) {
+          if (cache?.quota?.account?.id !== binding.accountId || cache?.quota?.limitId !== "google:all" || cache?.quota?.source !== "agy-cli") {
             throw new Error("cache belongs to a different account or quota group");
           }
         } catch {

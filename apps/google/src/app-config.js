@@ -2,6 +2,8 @@
 // 共用邏輯全部在 src/shared-gen/（來源是 packages/shared/）。
 window.APP_CONFIG = {
   brandName: "Google 主帳號",
+  quotaGroupCycling: true,
+  percentDigits: 2,
   compactThemeStorageKey: "googleUsageCompactTheme",
   emptyErrorCopyKey: "authRequired",
 
@@ -30,7 +32,7 @@ window.APP_CONFIG = {
 
   // 設定視窗的「Google 帳號用量」區塊。
   auth: {
-    quotaGroupChoice: true,
+    quotaGroupChoice: false,
     label: "AGY 帳號用量",
     checkingText: "檢查登入狀態中…",
     loggedInText: "已連接 AGY 帳號；登入過期時請先回 AGY 更新登入",

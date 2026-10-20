@@ -40,6 +40,8 @@ function hexToRgbTriplet(hex) {
 const state = {
   lang: "zh",
   quota: null,
+  snapshot: null,
+  selectedGroup: window.localStorage.getItem("googleQuotaSelectedGroup") || "gemini",
   // 面板 ＋／－ 的狀態（哪一個面板、還能不能加/減），由 main 行程推過來。
   panel: null,
   error: null,
@@ -388,7 +390,7 @@ function finiteNumberOrNull(value) {
 
 function percentText(value) {
   const number = finiteNumberOrNull(value);
-  return number === null ? "--" : `${Math.round(number)}%`;
+  return number === null ? "--" : `${APP_CONFIG.percentDigits === 2 ? number.toFixed(2) : Math.round(number)}%`;
 }
 
 function signedPercentText(value) {
@@ -508,6 +510,23 @@ function renderStaticCopy() {
 }
 
 function renderQuota(quota) {
+  if (APP_CONFIG.quotaGroupCycling) {
+    const groups = quota?.groups || [];
+    const group = groups.find(entry => entry.id === state.selectedGroup) || groups[0];
+    const label = document.getElementById("quotaGroupName");
+    label.hidden = false;
+    label.textContent = group?.name || "—";
+    els.body.dataset.quotaGroups = "true";
+    if (group) {
+      const active = group.primary || group.secondary;
+      quota = { ...quota, primary: group.primary, secondary: group.secondary,
+        remainingPercent: active?.remainingPercent ?? null,
+        usedPercent: active?.usedPercent ?? null, resetsAt: active?.resetsAt ?? null,
+        paceAdvice: group.paceAdvice || null };
+      els.liquidMeter.title = `${group.name} · 點擊切換模型群組`;
+      els.liquidMeter.setAttribute("aria-label", els.liquidMeter.title);
+    }
+  }
   state.quota = quota;
   state.error = null;
   renderStaticCopy();
@@ -528,6 +547,11 @@ function renderQuota(quota) {
   setText(els.planText, quota?.planType || t("unknown"));
 
   renderPaceAdvice(quota?.paceAdvice);
+  if (APP_CONFIG.quotaGroupCycling && !quota?.primary) {
+    const missing = state.lang === "zh" ? "未提供" : "Unavailable";
+    setText(els.primaryText, missing);
+    setText(els.compactShortText, missing);
+  }
   renderAccountBadge(quota);
 }
 
@@ -776,6 +800,10 @@ function renderError(error) {
 }
 
 function renderQuotaState(snapshot) {
+  state.snapshot = snapshot;
+  if (APP_CONFIG.quotaGroupCycling && !snapshot?.quota) {
+    document.getElementById("quotaGroupName").textContent = "—";
+  }
   const quota = snapshot?.quota || null;
   const error = snapshot?.error || null;
   const isRefreshing = Boolean(snapshot?.refreshing || snapshot?.status === "loading");
@@ -1210,6 +1238,25 @@ function stopCompactMove() {
     .catch(reportInteractionError);
 }
 
+// Google alone opts in; switching only selects the current snapshot and does
+// not query AGY, refresh credentials, or change the account binding.
+if (APP_CONFIG.quotaGroupCycling) {
+  els.liquidMeter.setAttribute("role", "button");
+  els.liquidMeter.tabIndex = 0;
+  const cycleGroup = () => {
+    const groups = state.snapshot?.quota?.groups;
+    if (!groups?.length) return;
+    const index = groups.findIndex(group => group.id === state.selectedGroup);
+    state.selectedGroup = groups[(index + 1) % groups.length].id;
+    window.localStorage.setItem("googleQuotaSelectedGroup", state.selectedGroup);
+    renderQuotaState(state.snapshot);
+  };
+  els.liquidMeter.addEventListener("click", cycleGroup);
+  els.liquidMeter.addEventListener("keydown", event => {
+    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); cycleGroup(); }
+  });
+}
+
 els.langBtn.addEventListener("click", () => {
   state.lang = state.lang === "zh" ? "en" : "zh";
   if (state.quota) {
@@ -1352,7 +1399,7 @@ window.quotaBridge.getQuotaState().then(renderQuotaState).catch(renderError);
 // 讓重置倒數每分鐘自己走，不必等下一次額度刷新
 window.setInterval(() => {
   if (!state.quota || state.loading) return;
-  setText(els.primaryText, formatWindow(state.quota.primary));
+  setText(els.primaryText, APP_CONFIG.quotaGroupCycling && !state.quota.primary ? (state.lang === "zh" ? "未提供" : "Unavailable") : formatWindow(state.quota.primary));
   setText(els.secondaryText, formatWindow(state.quota.secondary));
   setText(els.compactWeeklyResetText, compactResetDetail(state.quota.secondary));
   setText(els.compactShortResetText, compactResetDetail(state.quota.primary));

@@ -1,7 +1,7 @@
 "use strict";
 
-// Account quotas come only from the authenticated AGY API, never context usage
-// or statusLine files. Credentials belong to AGY and are always read-only.
+// Read the official AGY /usage JSON: direct web API calls were verified to
+// return a different quota scope. AGY owns login, token refresh and API routing.
 const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
@@ -11,13 +11,14 @@ const { promisify } = require("node:util");
 const run = promisify(execFile);
 const { buildPaceAdvice } = require("../shared-gen/pace-advice");
 const DEFAULT_TOKEN_FILE = path.join(os.homedir(), ".gemini", "antigravity-cli", "antigravity-oauth-token");
-const BASE_URL = "https://cloudcode-pa.googleapis.com/v1internal";
-const REQUEST_TIMEOUT_MS = 15_000;
+const AGY_EXECUTABLE = path.join(os.homedir(), ".local", "bin", "agy");
+const REQUEST_TIMEOUT_MS = 45_000;
 const FIVE_HOUR_WINDOW_MINS = 300;
 const SEVEN_DAY_WINDOW_MINS = 10080;
 const QUOTA_GROUPS = Object.freeze([
-  Object.freeze({ id: "gemini", label: "Gemini", prefix: "gemini" }),
-  Object.freeze({ id: "third-party", label: "Claude / GPT", prefix: "3p" })
+  Object.freeze({ id: "gemini", label: "Gemini Models", shortId: "gemini-5h", weeklyId: "gemini-weekly" }),
+  Object.freeze({ id: "third-party", label: "Claude and GPT Models", shortId: "3p-5h", weeklyId: "3p-weekly" }),
+  Object.freeze({ id: "argon", label: "Gemini 4 Argon", shortId: null, weeklyId: "gemini-argon-wtu-weekly" })
 ]);
 const quotaError = (message, code) => Object.assign(new Error(message), { code });
 function quotaGroup(id) {
@@ -79,8 +80,8 @@ function normalizeWindow(window) {
     throw new Error("Google 用量視窗缺少數值型的 used_percentage。");
   }
   if (window.usedPercent < 0 || window.usedPercent > 100) throw new Error("Google 用量比例超出範圍。");
-  const usedPercent = Math.round(window.usedPercent * 10) / 10;
-  return { usedPercent, remainingPercent: Math.round((100 - usedPercent) * 10) / 10,
+  const usedPercent = Math.round(window.usedPercent * 100) / 100;
+  return { usedPercent, remainingPercent: Math.round((100 - usedPercent) * 100) / 100,
     windowDurationMins: window.windowDurationMins ?? null, resetsAt: normalizeResetTime(window.resetsAt) };
 }
 function normalizeSnapshot(snapshot, now = Date.now()) {
@@ -93,79 +94,79 @@ function normalizeSnapshot(snapshot, now = Date.now()) {
     usedPercent: active.usedPercent, resetsAt: active.resetsAt, fetchedAt: new Date(now).toISOString() };
   return { ...normalized, paceAdvice: buildPaceAdvice(normalized, normalized.fetchedAt) };
 }
-function parseQuotaSummary(data, { group = "gemini", planName = "Google AI", now = Date.now() } = {}) {
-  const selected = quotaGroup(group);
-  const buckets = [...(Array.isArray(data?.buckets) ? data.buckets : []),
-    ...(Array.isArray(data?.groups) ? data.groups.flatMap((entry) => Array.isArray(entry?.buckets) ? entry.buckets : []) : [])];
-  function windowFor(suffix, duration, windowName) {
-    const matches = buckets.filter((bucket) => bucket?.bucketId === `${selected.prefix}-${suffix}`);
-    if (matches.length !== 1 || matches[0].disabled === true) {
-      throw quotaError(`Google 回應缺少 ${selected.label} 的唯一 ${windowName} 額度。`, "INVALID_QUOTA");
-    }
-    const bucket = matches[0];
-    if (bucket.window !== undefined && bucket.window !== suffix) throw quotaError("Google 額度視窗與群組不符。", "INVALID_QUOTA");
-    if (typeof bucket.remainingFraction !== "number" || !Number.isFinite(bucket.remainingFraction)
-      || bucket.remainingFraction < 0 || bucket.remainingFraction > 1) throw quotaError("Google 額度比例無效。", "INVALID_QUOTA");
-    const resetsAt = normalizeResetTime(bucket.resetTime);
-    if (!resetsAt || Date.parse(resetsAt) <= now) throw quotaError("Google 額度重置時間缺漏或已過期，請稍後重新整理。", "INVALID_QUOTA");
-    return { usedPercent: (1 - bucket.remainingFraction) * 100, resetsAt, windowDurationMins: duration };
+function parseUsageDocument(document, { now = Date.now() } = {}) {
+  if (document?.status !== "SUCCESS" || document?.num_turns !== 0 || document?.command?.name !== "usage"
+    || !Array.isArray(document.command.data?.groups)) {
+    throw quotaError("AGY 未回傳有效的 /usage 資料，請先在 AGY 確認登入。", "INVALID_USAGE");
   }
-  const primary = windowFor("5h", FIVE_HOUR_WINDOW_MINS, "5 小時"), secondary = windowFor("weekly", SEVEN_DAY_WINDOW_MINS, "每週");
-  return normalizeSnapshot({ limitId: `google:${group}`, limitName: `Google · ${selected.label}`, planType: `${planName} · ${selected.label}`,
-    rateLimitReachedType: primary.usedPercent >= 100 || secondary.usedPercent >= 100 ? "rate_limit_reached" : null, primary, secondary }, now);
+  const buckets = document.command.data.groups.flatMap(group => Array.isArray(group?.buckets) ? group.buckets : []);
+  function windowFor(id, duration) {
+    if (!id) return null;
+    const matches = buckets.filter(bucket => bucket?.id === id);
+    if (!matches.length) return null;
+    if (matches.length !== 1) throw quotaError("AGY 回傳重複的額度視窗。", "INVALID_USAGE");
+    const bucket = matches[0], fraction = bucket.remaining_fraction;
+    if (bucket.disabled === true || typeof fraction !== "number" || !Number.isFinite(fraction) || fraction < 0 || fraction > 1) {
+      throw quotaError("AGY 額度比例無效。", "INVALID_USAGE");
+    }
+    const expectedWindow = duration === FIVE_HOUR_WINDOW_MINS ? "5h" : "weekly";
+    if (bucket.window !== expectedWindow) throw quotaError("AGY 額度視窗不符。", "INVALID_USAGE");
+    const resetsAt = normalizeResetTime(bucket.reset_time);
+    if (!resetsAt || Date.parse(resetsAt) <= now) throw quotaError("AGY 額度重置時間缺漏或已過期。", "INVALID_USAGE");
+    const remainingPercent = Math.round(fraction * 10000) / 100;
+    return { remainingPercent, usedPercent: Math.round((100 - remainingPercent) * 100) / 100,
+      windowDurationMins: duration, resetsAt };
+  }
+  const groups = QUOTA_GROUPS.map(group => ({ id: group.id, name: group.label,
+    primary: windowFor(group.shortId, FIVE_HOUR_WINDOW_MINS), secondary: windowFor(group.weeklyId, SEVEN_DAY_WINDOW_MINS) }));
+  for (const group of groups) {
+    group.paceAdvice = buildPaceAdvice({ ...group, limitId: `google:${group.id}` }, new Date(now).toISOString());
+  }
+  const active = groups.find(group => group.primary || group.secondary);
+  if (!active) throw quotaError("AGY /usage 沒有已知的額度資料。", "INVALID_USAGE");
+  const overview = normalizeSnapshot({ limitId: "google:all", limitName: "Google · AGY", planType: "AGY",
+    primary: active.primary, secondary: active.secondary }, now);
+  return { ...overview, groups, source: "agy-cli" };
 }
-async function requestJson(action, body, credential, { fetchImpl = globalThis.fetch, timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+async function readUsageJson({ runCommand = run, executable = AGY_EXECUTABLE, timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
+  let result;
   try {
-    const response = await fetchImpl(`${BASE_URL}:${action}`, { method: "POST", signal: controller.signal,
-      headers: { Authorization: `Bearer ${credential.accessToken}`, "Content-Type": "application/json",
-        "User-Agent": `antigravity/1.0 (os_type=darwin; arch=${process.arch === "arm64" ? "arm64" : "amd64"})` }, body: JSON.stringify(body) });
-    if (response.status === 401) throw quotaError("AGY 登入已過期，請先在 AGY 重新登入，再重新整理。", "AUTH_EXPIRED");
-    if (response.status === 403) throw quotaError("此 AGY 帳號無權讀取 Google 額度。", "AUTH_DENIED");
-    if (!response.ok) throw quotaError(`Google 額度查詢失敗（HTTP ${response.status}）。`, "HTTP_ERROR");
-    const text = await response.text();
-    if (Buffer.byteLength(text) > 2 * 1024 * 1024) throw quotaError("Google 回應過大。", "INVALID_RESPONSE");
-    try { return JSON.parse(text); }
-    catch { throw quotaError("Google 額度回應不是有效的 JSON。", "INVALID_RESPONSE"); }
+    const operation = runCommand(executable, ["-p", "/usage", "--output-format", "json"], {
+      cwd: os.tmpdir(), timeout: timeoutMs, maxBuffer: 2 * 1024 * 1024, windowsHide: true
+    });
+    operation.child?.stdin?.end();
+    result = await operation;
   } catch (error) {
-    if (controller.signal.aborted) throw quotaError("Google 額度查詢逾時，請稍後重試。", "TIMEOUT");
-    if (["AUTH_EXPIRED", "AUTH_DENIED", "HTTP_ERROR", "INVALID_RESPONSE"].includes(error.code)) throw error;
-    // Transport messages and response bodies can contain credentials.
-    throw quotaError("無法連線到 Google 額度服務，請稍後重試。", "NETWORK_ERROR");
-  } finally { clearTimeout(timer); }
+    if (error.code === "ENOENT") throw quotaError("找不到 AGY，請先安裝 AGY CLI。", "CLI_MISSING");
+    if (error.killed || error.code === "ETIMEDOUT") throw quotaError("AGY /usage 查詢逾時，請稍後重試。", "TIMEOUT");
+    throw quotaError("AGY /usage 讀取失敗，請先在 AGY 確認登入後重試。", "CLI_ERROR");
+  }
+  if (typeof result?.stdout !== "string" || Buffer.byteLength(result.stdout) > 2 * 1024 * 1024) {
+    throw quotaError("AGY /usage 回應無效。", "INVALID_USAGE");
+  }
+  try { return JSON.parse(result.stdout); }
+  catch { throw quotaError("AGY /usage 回應不是有效 JSON。", "INVALID_USAGE"); }
 }
-function createQuotaService({ readCredential: readToken = readCredential, fetchImpl = globalThis.fetch,
-  now = Date.now, timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
-  let projectCache = null;
-  return { async getQuota({ tokenFile, keychainAccount, accountId, group = "gemini" }) {
-    quotaGroup(group);
+function createQuotaService({ readCredential: readToken = readCredential, readUsage = readUsageJson, now = Date.now } = {}) {
+  return { async getQuota({ tokenFile, keychainAccount, accountId }) {
     if ((!tokenFile && !keychainAccount) || !accountId) throw quotaError("尚未連接此面板的 AGY 帳號，請按齒輪連接。", "NOT_CONNECTED");
-    const credential = await readToken(keychainAccount ? { type: "keychain", account: keychainAccount } : tokenFile);
-    if (credential.accountId !== accountId) {
-      projectCache = null;
-      throw quotaError("AGY 憑證已換成另一個帳號；此面板已停止讀取，請按齒輪重新連接。", "ACCOUNT_CHANGED");
+    const source = keychainAccount ? { type: "keychain", account: keychainAccount } : tokenFile;
+    async function verifyIdentity() {
+      const credential = await readToken(source);
+      if (credential.accountId !== accountId) throw quotaError("AGY 已換成另一個帳號，請重新連接此面板。", "ACCOUNT_CHANGED");
+      // Old file-based bindings may remain, but the CLI reads the local AGY
+      // account. Never present another account's CLI data in such a panel.
+      if (!keychainAccount && (await readToken({ type: "keychain", account: "antigravity" })).accountId !== accountId) {
+        throw quotaError("此面板與本機 AGY 帳號不同，請連接本機 AGY。", "ACCOUNT_CHANGED");
+      }
+      return credential;
     }
-    if (credential.expiresAt !== null && credential.expiresAt <= now() + 5000) {
-      throw quotaError("AGY 登入已過期，請開啟 AGY 更新登入，再重新整理。", "AUTH_EXPIRED");
-    }
-    const tokenKey = crypto.createHash("sha256").update(credential.accessToken).digest("hex");
-    const request = (action, body) => requestJson(action, body, credential, { fetchImpl, timeoutMs });
-    if (!projectCache || projectCache.tokenKey !== tokenKey || projectCache.accountId !== accountId) {
-      projectCache = null;
-      const info = await request("loadCodeAssist", { metadata: { ideType: "ANTIGRAVITY",
-        platform: process.arch === "arm64" ? "DARWIN_ARM64" : "DARWIN_AMD64", pluginType: "GEMINI" } });
-      const project = typeof info?.cloudaicompanionProject === "string" ? info.cloudaicompanionProject : info?.cloudaicompanionProject?.id;
-      if (typeof project !== "string" || !project.trim()) throw quotaError("Google 未回傳此帳號的有效 project。", "INVALID_RESPONSE");
-      const plan = info?.paidTier?.name || info?.currentTier?.name;
-      projectCache = { tokenKey, accountId, project, planName: typeof plan === "string" ? plan : "Google AI" };
-    }
-    let summary;
-    try { summary = await request("retrieveUserQuotaSummary", { project: projectCache.project }); }
-    catch (error) { projectCache = null; throw error; }
-    const quota = parseQuotaSummary(summary, { group, planName: projectCache.planName, now: now() });
-    return { ...quota, source: "google-api", account: { id: accountId, email: credential.email, source: "agy" } };
+    await verifyIdentity();
+    const document = await readUsage();
+    const credential = await verifyIdentity();
+    const quota = parseUsageDocument(document, { now: now() });
+    return { ...quota, account: { id: accountId, email: credential.email, source: "agy" } };
   } };
 }
-module.exports = { DEFAULT_TOKEN_FILE, REQUEST_TIMEOUT_MS, FIVE_HOUR_WINDOW_MINS, SEVEN_DAY_WINDOW_MINS,
-  QUOTA_GROUPS, quotaGroup, readCredential, normalizeWindow, normalizeSnapshot, parseQuotaSummary, requestJson, createQuotaService };
+module.exports = { DEFAULT_TOKEN_FILE, AGY_EXECUTABLE, REQUEST_TIMEOUT_MS, FIVE_HOUR_WINDOW_MINS, SEVEN_DAY_WINDOW_MINS,
+  QUOTA_GROUPS, quotaGroup, readCredential, normalizeWindow, normalizeSnapshot, parseUsageDocument, readUsageJson, createQuotaService };

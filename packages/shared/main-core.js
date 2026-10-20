@@ -84,6 +84,7 @@ function normalizeConfig(raw) {
     // 「＋」的命名視窗跟 settings.html 放在同一個 shared-gen 資料夾，自動推出來就好。
     panelNameHtmlPath: raw.panelNameHtmlPath || path.join(path.dirname(raw.settingsHtmlPath), "panel-name.html"),
     readQuota: raw.readQuota,
+    windowSize: raw.windowSize || WINDOW_SIZES.full,
     settingsWindowTitle: raw.settingsWindowTitle || "小工具設定",
     settingsWindowSize: {
       width: raw.settingsWindowSize?.width || 360,
@@ -332,7 +333,7 @@ function createWindow() {
   const existingWindow = getLiveWindow();
   if (existingWindow) return existingWindow;
 
-  const initialSize = isCompactMode ? scaledCompactSize() : WINDOW_SIZES.full;
+  const initialSize = isCompactMode ? scaledCompactSize() : config.windowSize;
   const minCompactSize = compactMinimumSize();
   const window = new BrowserWindow({
     width: initialSize.width,
@@ -839,8 +840,8 @@ function setCompactMode(value) {
       setCompactTopStrip(false);
       isCompactExpanded = false;
       setCompactMousePassthrough(false);
-      window.setMinimumSize(WINDOW_SIZES.full.width, WINDOW_SIZES.full.height);
-      window.setSize(WINDOW_SIZES.full.width, WINDOW_SIZES.full.height, false);
+      window.setMinimumSize(config.windowSize.width, config.windowSize.height);
+      window.setSize(config.windowSize.width, config.windowSize.height, false);
       placeWindowTopRight(window);
     }
   }
