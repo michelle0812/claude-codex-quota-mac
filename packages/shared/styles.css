@@ -1531,7 +1531,7 @@ body[data-view="compact"] .compact-shell {
 }
 
 /* Opt-in Google model group selector, within the existing panel dimensions. */
-.quota-group-name { min-width: 0; font-size: 9px; color: #b8cbef; white-space: nowrap; }
+.quota-group-name { min-width: 0; font-size: 11px; color: #b8cbef; white-space: nowrap; }
 .quota-group-name[hidden] { display: none; }
 body[data-quota-groups="true"] .pace-heading { gap: 5px; }
 body[data-quota-groups="true"] .pace-heading > :first-child { flex-shrink: 0; }

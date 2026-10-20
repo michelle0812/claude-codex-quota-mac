@@ -120,6 +120,7 @@ require(${JSON.stringify(path.join(bundle, "Contents/Resources/app.asar/src/main
     assert.equal(initial.quota.limitId, "google:all"); assert.equal(initial.quota.source, "agy-cli");
     assert.equal(initial.quota.groups.length, 3);
     assert.deepEqual(await main.eval("[innerWidth,innerHeight]"), [390,336]);
+    assert.equal(await main.eval("getComputedStyle(document.querySelector('#quotaGroupName')).fontSize"), "11px");
     const previewPaths = [];
     for (const group of initial.quota.groups) {
       assert.equal(await main.eval("document.querySelector('#quotaGroupName').textContent"), group.name);
