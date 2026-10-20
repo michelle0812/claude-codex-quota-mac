@@ -22,7 +22,7 @@ assert.equal("showInDock" in normalizeWidgetSettings({ showInDock: true, autoUpd
 const repoRoot = path.resolve(__dirname, "..", "..");
 const settingsHtml = fs.readFileSync(path.join(repoRoot, "packages", "shared", "settings.html"), "utf8");
 assert.equal(/showInDock|Dock/.test(settingsHtml), false, "settings.html 不應再提到 Dock");
-for (const appName of ["claude", "codex"]) {
+for (const appName of ["claude", "codex", "google"]) {
   const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, "apps", appName, "package.json"), "utf8"));
   assert.equal(pkg.build?.mac?.extendInfo?.LSUIElement, true, `${appName}: build.mac.extendInfo.LSUIElement 必須是 true`);
 }

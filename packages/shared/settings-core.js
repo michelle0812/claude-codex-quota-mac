@@ -136,6 +136,44 @@ function buildAuthField(auth) {
   els.authLoginBtn = loginBtn;
   els.authLogoutBtn = logoutBtn;
   if (auth.browserChoice) buildBrowserChoice(section);
+  if (auth.quotaGroupChoice) buildQuotaGroupChoice(section);
+}
+
+function buildQuotaGroupChoice(section) {
+  const controls = document.createElement("div");
+  controls.className = "browser-choice";
+  const label = document.createElement("label");
+  label.htmlFor = "quotaGroup";
+  label.textContent = "額度群組";
+  const select = document.createElement("select");
+  select.id = "quotaGroup";
+  select.disabled = true;
+  const hint = document.createElement("p");
+  hint.className = "hint";
+  hint.textContent = "Gemini 與 Claude / GPT 各有獨立額度。帳號請先在 AGY 登入，再按連接；每個面板各自設定。";
+  controls.append(label, select, hint);
+  section.prepend(controls);
+  let current;
+  function render(options) {
+    current = options;
+    select.replaceChildren(...options.groups.map((group) => {
+      const option = document.createElement("option");
+      option.value = group.id; option.textContent = group.label; return option;
+    }));
+    select.value = options.group;
+    hint.textContent = (options.email ? `AGY 帳號：${options.email}。` : "")
+      + "Gemini 與 Claude / GPT 各有獨立額度。請先在 AGY 登入，再按連接；每個面板各自設定。";
+  }
+  window.quotaBridge.getAuthOptions().then(render).then(() => { select.disabled = false; }).catch(showError);
+  window.quotaBridge.onAuthStatusChanged(() => window.quotaBridge.getAuthOptions().then(render).catch(showError));
+  select.addEventListener("change", async () => {
+    select.disabled = true;
+    try {
+      render(await window.quotaBridge.setAuthOptions({ group: select.value }));
+      els.statusText.textContent = "已儲存此面板的額度群組";
+    } catch (error) { if (current) render(current); showError(error); }
+    finally { select.disabled = false; }
+  });
 }
 
 let browserOptions = null;
@@ -194,8 +232,9 @@ async function login() {
   els.authStatus.textContent = browserOptions?.source === "browser" ? "請在選定瀏覽器完成橋接並登入 ChatGPT（2 分鐘內）…" : auth.loginPendingText;
   try {
     const result = await window.quotaBridge.login();
+    if (result?.cancelled) { renderAuthStatus(await window.quotaBridge.getAuthStatus()); return; }
     if (browserOptions && result?.email) browserOptions.email = result.email;
-    renderAuthStatus(true);
+    renderAuthStatus(await window.quotaBridge.getAuthStatus());
     els.statusText.textContent = auth.loginDoneText;
   } catch (error) {
     renderAuthStatus(false);

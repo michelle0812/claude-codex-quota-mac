@@ -1,7 +1,7 @@
 {
   "name": "claude-codex-quota-mac",
   "version": "1.2.3",
-  "description": "Claude 額度與 Codex 額度兩個 macOS 桌面小工具的合併 repo。",
+  "description": "Claude 額度、Codex 額度與 Google 額度三個 macOS 桌面小工具的合併 repo。",
   "private": true,
   "license": "MIT",
   "author": "michelle0812",
@@ -19,15 +19,19 @@
     "postinstall": "npm run sync-shared",
     "install:claude": "npm --prefix apps/claude install",
     "install:codex": "npm --prefix apps/codex install",
-    "install:all": "npm run install:claude && npm run install:codex",
+    "install:google": "npm --prefix apps/google install",
+    "install:all": "npm run install:claude && npm run install:codex && npm run install:google",
     "start:claude": "npm run heal-electron && npm --prefix apps/claude run start",
     "start:codex": "npm run heal-electron && npm --prefix apps/codex run start",
+    "start:google": "npm run heal-electron && npm --prefix apps/google run start",
     "test:claude": "npm --prefix apps/claude test",
     "test:codex": "npm --prefix apps/codex test",
-    "test:all": "npm run test:claude && npm run test:codex",
+    "test:google": "npm --prefix apps/google test",
+    "test:all": "npm run test:claude && npm run test:codex && npm run test:google",
     "build:claude": "npm --prefix apps/claude run build",
     "build:codex": "npm --prefix apps/codex run build",
-    "build:all": "npm run build:claude && npm run build:codex",
+    "build:google": "npm --prefix apps/google run build",
+    "build:all": "npm run build:claude && npm run build:codex && npm run build:google",
     "build-release": "node scripts/build-release.js"
   }
 }

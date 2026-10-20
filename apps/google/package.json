@@ -1,0 +1,92 @@
+{
+  "name": "google-quota-mac",
+  "version": "1.2.3",
+  "description": "macOS AGY 帳號用量面板，分開監看 Gemini 與 Claude / GPT 的 5 小時、每週額度。",
+  "main": "src/main/main.js",
+  "author": "michelle0812 and Google Usage Widget contributors",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/michelle0812/claude-codex-quota-mac.git"
+  },
+  "homepage": "https://github.com/michelle0812/claude-codex-quota-mac#readme",
+  "bugs": {
+    "url": "https://github.com/michelle0812/claude-codex-quota-mac/issues"
+  },
+  "keywords": [
+    "google",
+    "antigravity",
+    "gemini",
+    "google-quota",
+    "usage-widget",
+    "rate-limit",
+    "desktop-widget",
+    "electron",
+    "macos-widget",
+    "google用量",
+    "google用量小工具"
+  ],
+  "scripts": {
+    "sync-shared": "node ../../scripts/sync-shared.js",
+    "heal-electron": "node ../../scripts/heal-electron.js apps/google",
+    "postinstall": "npm run sync-shared && npm run heal-electron",
+    "prestart": "npm run sync-shared && npm run heal-electron",
+    "predev": "npm run sync-shared && npm run heal-electron",
+    "prebuild": "npm run sync-shared",
+    "prebuild:dir": "npm run sync-shared",
+    "pretest": "npm run sync-shared",
+    "dev": "electron .",
+    "start": "electron .",
+    "test:pace": "node scripts/verify-pace-advice.js",
+    "test:quota-store": "node scripts/verify-quota-store.js",
+    "test:widget-settings": "node scripts/verify-widget-settings.js",
+    "test:app-config": "node scripts/verify-app-config.js",
+    "test:preload": "node scripts/verify-preload.js",
+    "test:profiles": "node scripts/verify-profiles.js",
+    "test": "npm run test:pace && npm run test:quota-store && npm run test:profiles && npm run test:widget-settings && npm run test:app-config && npm run test:preload && npm run test:update-check && npm run test:mac-updater && npm run test:google-service",
+    "build": "npm run build:arm64 && npm run build:x64",
+    "build:dir": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --dir",
+    "build:arm64": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --arm64",
+    "build:x64": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --x64",
+    "prebuild:arm64": "npm run sync-shared",
+    "prebuild:x64": "npm run sync-shared",
+    "test:update-check": "node scripts/verify-update-check.js",
+    "test:mac-updater": "node ../../packages/build-scripts/verify-mac-updater.js",
+    "test:google-service": "node scripts/verify-google-service.js",
+    "test:smoke": "node scripts/smoke-google-ui.js"
+  },
+  "build": {
+    "appId": "com.google.usage.widget",
+    "productName": "Google 額度",
+    "afterPack": "scripts/after-pack-macos.js",
+    "afterAllArtifactBuild": "scripts/after-all-artifact-build.js",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "assets/app-icon.png",
+      "assets/app-icon-tray-16.png",
+      "assets/app-icon-256.png",
+      "package.json"
+    ],
+    "mac": {
+      "icon": "assets/app-icon.png",
+      "target": [
+        "dmg"
+      ],
+      "artifactName": "GoogleQuota-${version}-macOS-${arch}.${ext}",
+      "extendInfo": {
+        "LSUIElement": true
+      }
+    }
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "allowScripts": {
+    "electron@31.7.7": true
+  }
+}

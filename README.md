@@ -1,15 +1,16 @@
-# Claude 額度 & Codex 額度 for macOS
+# Claude 額度、Codex 額度 & Google 額度 for macOS
 
-兩款專為 **macOS** 打造的用量桌面小工具，以繁體中文顯示 **5 小時**與 **7 天**用量、重置時間及使用節奏。
-它們是**兩個各自獨立的 App**，共用同一份 UI／HUD／節奏判斷邏輯，因此放在同一個 repo 維護。
+三款專為 **macOS** 打造的用量桌面小工具，以繁體中文顯示 **5 小時**與 **7 天**用量、重置時間及使用節奏。
+它們是**三個各自獨立的 App**，共用同一份 UI／HUD／節奏判斷邏輯，因此放在同一個 repo 維護。
 
 | App | 看什麼 | 資料來源 | 安裝後名稱 |
 |---|---|---|---|
 | **Claude 額度** | Claude Code 用量，**支援多個 claude.ai 帳號各一個面板** | 本機 statusLine hook，或登入 claude.ai 讀帳號級別用量 | `/Applications/Claude 額度.app` |
 | **Codex 額度** | Codex（ChatGPT 訂閱）用量，**支援多個帳號各一個面板** | 在齒輪裡登入 ChatGPT（或沿用 `codex login` 的 `~/.codex/auth.json`），直接打 OpenAI 用量 API | `/Applications/Codex 額度.app` |
+| **Google 額度** | Google (Antigravity / Gemini) 用量，**支援多帳號各一個面板** | 唯讀連接 AGY 憑證，直接查詢 Google 額度 API；可選 Gemini 或 Claude / GPT 群組 | `/Applications/Google 額度.app` |
 
 > [!IMPORTANT]
-> **這兩個 App 還沒有 Apple 公證（notarization）**，所以第一次開啟會被 Gatekeeper 擋下來，
+> **這些 App 還沒有 Apple 公證（notarization）**，所以第一次開啟會被 Gatekeeper 擋下來，
 > 顯示「無法打開，因為 Apple 無法檢查其是否包含惡意軟體」。
 > 本魯蛇還沒買 Apple 開發者帳號，不過很快應該就會買了 哈哈 🙃
 >
@@ -23,9 +24,10 @@
 > ```bash
 > xattr -cr "/Applications/Claude 額度.app"
 > xattr -cr "/Applications/Codex 額度.app"
+> xattr -cr "/Applications/Google 額度.app"
 > ```
 >
-> 兩個 App 都是 ad-hoc 簽章（`codesign -dv` 會顯示 `Signature=adhoc`），程式碼全部公開在這個 repo 裡，可以自行檢視或自行建置。
+> 所有 App 都是 ad-hoc 簽章（`codesign -dv` 會顯示 `Signature=adhoc`），程式碼全部公開在這個 repo 裡，可以自行檢視或自行建置。
 
 ---
 
@@ -192,6 +194,29 @@ Claude Code ──stdin JSON──▶ usage-statusline.py ──▶ ~/.claude/us
 
 `chatgpt.com/backend-api/...`、`auth.openai.com` 登入流程與 OAuth client id 皆為
 OpenAI 未公開介面，改版即可能失效；失效時在齒輪裡重新登入即可。
+
+---
+
+## Google 額度：運作方式
+
+在齒輪中按「連接 AGY 帳號」→「連接本機 AGY」，直接讀取 macOS 鑰匙圈中的
+AGY 登入（`gemini / antigravity`）。macOS 若要求存取，請允許。這是連接現有 AGY 登入，
+不是另外開 Google OAuth 登入。App 不複製、刷新、修改或刪除 AGY 憑證。
+登入到期時，請先在 AGY 更新登入，再回面板重新整理。
+
+「額度群組」可選 **Gemini** 或 **Claude / GPT**。兩組各自有 5 小時及每週額度，
+不能混用。資料直接來自 Google `loadCodeAssist` 與 `retrieveUserQuotaSummary`；
+這是未公開介面，變更或無法解析時會顯示錯誤，不拿上下文使用率、本機 statusLine
+或別組額度替代。
+
+每個面板獨立儲存登入來源、帳號識別與群組。新增面板預設未連接，須個別連接。
+若使用自行管理的憑證檔，可選「選擇其他憑證檔」；預設檔案位置為
+`~/.gemini/antigravity-cli/antigravity-oauth-token`，但 macOS 的正常登入通常只存鑰匙圈，沒有此檔。憑證換成另一個帳號時，原面板會停止讀取並要求重新連接；
+不會跟著全域帳號切換。中斷連接只移除此面板的綁定，不登出 AGY。
+連接帳號或變更群組時，會清除面板的舊額度與歷史，避免混用。
+
+`node scripts/install-google-app.js --stage-only` 只會用 electron-builder 建置並驗證
+新的 App，輸出至獨立暫存建置目錄；不會替換 `/Applications` 的現有 App。
 
 ---
 

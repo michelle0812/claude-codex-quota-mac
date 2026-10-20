@@ -668,7 +668,7 @@ function registerIpcHandlers() {
     ipcMain.handle("auth:options:set", async (_event, value) => {
       const previous = await config.auth.getOptions();
       const result = await config.auth.setOptions(value);
-      if (previous.source !== result.source || previous.browser !== result.browser) await quotaStore?.resetAccount();
+      if (previous.source !== result.source || previous.browser !== result.browser || previous.group !== result.group) await quotaStore?.resetAccount();
       broadcastAuthStatus(await config.auth.hasSession());
       await refreshQuotaQuietly("auth-source-change");
       return result;
@@ -679,14 +679,16 @@ function registerIpcHandlers() {
 async function loginAuthProvider() {
   if (config.auth.getOptions && (await config.auth.getOptions()).source === "browser") await quotaStore?.resetAccount();
   const result = await config.auth.login();
-  broadcastAuthStatus(true);
+  if (result?.cancelled) return result;
+  if (config.auth.resetQuotaOnChange) await quotaStore?.resetAccount();
+  broadcastAuthStatus(await config.auth.hasSession());
   await refreshQuotaQuietly("auth-login");
   return result;
 }
 
 async function logoutAuthProvider() {
   await config.auth.logout();
-  if (config.auth.getOptions && (await config.auth.getOptions()).source === "browser") await quotaStore?.resetAccount();
+  if (config.auth.resetQuotaOnChange || (config.auth.getOptions && (await config.auth.getOptions()).source === "browser")) await quotaStore?.resetAccount();
   broadcastAuthStatus(false);
   await refreshQuotaQuietly("auth-logout");
   return true;

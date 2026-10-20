@@ -29,12 +29,13 @@ const TAG = "[build-release]";
 
 const APPS = [
   { dir: "apps/claude", product: "Claude 額度" },
-  { dir: "apps/codex", product: "Codex 額度" }
+  { dir: "apps/codex", product: "Codex 額度" },
+  { dir: "apps/google", product: "Google 額度" }
 ];
 
 // electron-builder 的 mac 輸出目錄：arm64 在 mac-arm64/，x64 在 mac/。
 function combinedZipName(v, key) {
-  return `ClaudeCodexQuota-${v}-macOS-${key}.zip`;
+  return `ClaudeCodexGoogleQuota-${v}-macOS-${key}.zip`;
 }
 
 const ARCHES = [
@@ -82,8 +83,8 @@ function main() {
       }
     }
   }
-  if (dmgs.length !== 4) {
-    throw new Error(`預期 4 個 dmg，實際 ${dmgs.length}：${dmgs.join(", ")}`);
+  if (dmgs.length !== APPS.length * 2) {
+    throw new Error(`預期 ${APPS.length * 2} 個 dmg，實際 ${dmgs.length}：${dmgs.join(", ")}`);
   }
 
   // 2. 合併 zip：每個架構把兩個 app 的 .app 複製進暫存夾，再 ditto 壓成一包
