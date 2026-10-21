@@ -54,7 +54,7 @@ startQuotaWidget({
   readQuota,
   panelNameHtmlPath: path.join(__dirname, "../shared-gen/panel-name.html"),
   settingsWindowTitle: profile.name ? `小工具設定 · ${profile.name}` : undefined,
-  settingsWindowSize: { width: 390, height: 420 },
+  settingsWindowSize: { width: 360, height: 620 },
   rendererQuery: profile.name || profile.accent || !isDefaultProfile
     ? { name: profile.name, accent: profile.accent, extra: !isDefaultProfile }
     : undefined,
@@ -68,14 +68,9 @@ startQuotaWidget({
       accountService.configure(directory);
       grokWebService.configure(directory);
     },
-    hasSession: async () => (await grokWebService.hasSession()) || (await accountService.hasSession()),
-    login: async () => grokWebService.login(),
-    logout: async () => {
-      await grokWebService.logout();
-      await accountService.logout();
-    },
-    getOptions: () => accountService.getOptions(),
-    setOptions: (value) => accountService.setOptions(value),
+    hasSession: () => grokWebService.hasSession(),
+    login: () => grokWebService.login(),
+    logout: () => grokWebService.logout(),
     resetQuotaOnChange: true
   }
 });

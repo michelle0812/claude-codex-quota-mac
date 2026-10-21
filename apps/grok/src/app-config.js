@@ -30,18 +30,17 @@ window.APP_CONFIG = {
     }
   },
 
-  // 設定視窗的「Grok 帳號用量」區塊。
+  // 設定視窗的「grok.com 帳號用量」區塊。
   auth: {
-    quotaGroupChoice: false,
-    label: "Grok 帳號用量",
+    label: "grok.com 帳號用量",
     checkingText: "檢查登入狀態中…",
-    loggedInText: "已連接 grok.com 帳號或本機 Grok",
-    loggedOutText: "尚未登入 grok.com；點擊登入以同步 7 天官方算力池",
-    loginLabel: "登入 grok.com 帳號",
+    loggedInText: "已登入：優先顯示 grok.com 帳號用量與 7 天算力池",
+    loggedOutText: "未登入：顯示本機 Grok 用量；點擊登入以同步 7 天官方算力池",
+    loginLabel: "登入 grok.com",
     logoutLabel: "登出 grok.com",
     loginPendingText: "正在開啟 grok.com 登入視窗…",
-    loginDoneText: "已登入 grok.com 網頁帳號",
-    logoutDoneText: "已登出 grok.com，保留本機 Grok 連線"
+    loginDoneText: "已登入 grok.com",
+    logoutDoneText: "已登出 grok.com，恢復顯示本機 Grok 用量"
   }
 };
 
