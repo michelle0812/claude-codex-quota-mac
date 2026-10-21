@@ -17,10 +17,16 @@ async function matchingProcesses(executable) {
 }
 
 async function stopInstances(manifest) {
-  // 主程序收到 ready 後會自行退出；不替它強制結束尚未完成的工作。
+  // 主程序收到 ready 後會自行退出；若超時未退出則主動終止。
   for (let attempt = 0; attempt < 60; attempt += 1) {
     const pids = await matchingProcesses(manifest.executable);
     if (!pids.includes(manifest.parentPid)) break;
+    if (attempt === 6 && manifest.parentPid) {
+      try { process.kill(manifest.parentPid, "SIGTERM"); } catch (error) { if (error.code !== "ESRCH") throw error; }
+    }
+    if (attempt === 20 && manifest.parentPid) {
+      try { process.kill(manifest.parentPid, "SIGKILL"); } catch (error) { if (error.code !== "ESRCH") throw error; }
+    }
     if (attempt === 59) throw new Error("App 未能結束，已取消更新；舊版未變更。");
     await delay(500);
   }
@@ -31,7 +37,13 @@ async function stopInstances(manifest) {
     }
   }
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    if ((await matchingProcesses(manifest.executable)).length === 0) return;
+    const remaining = await matchingProcesses(manifest.executable);
+    if (remaining.length === 0) return;
+    if (attempt === 20) {
+      for (const pid of remaining) {
+        try { process.kill(pid, "SIGKILL"); } catch (error) { if (error.code !== "ESRCH") throw error; }
+      }
+    }
     await delay(500);
   }
   throw new Error("其他面板尚未結束，已取消更新；舊版未變更。");

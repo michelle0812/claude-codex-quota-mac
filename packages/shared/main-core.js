@@ -294,7 +294,17 @@ async function offerUpdate(release) {
     updateState = { ...updateState, progress: "正在安裝並重新啟動…" };
     broadcastUpdateState();
     await launchInstaller(prepared);
+    isQuitting = true;
+    cancelWindowRelease();
+    quotaStore?.destroy();
+    updateProgressWindow?.destroy();
+    updateProgressWindow = null;
+    mainWindow?.destroy();
+    mainWindow = null;
+    settingsWindow?.destroy();
+    settingsWindow = null;
     app.quit();
+    if (typeof app.exit === "function") app.exit(0);
   } catch (error) {
     updateProgressWindow?.destroy();
     updateProgressWindow = null;
