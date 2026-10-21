@@ -1,6 +1,6 @@
 {
   "name": "claude-codex-quota-mac",
-  "version": "1.2.7",
+  "version": "1.2.8",
   "description": "Claude 額度、Codex 額度、Google 額度與 Grok 額度四個 macOS 桌面小工具的合併 repo。",
   "private": true,
   "license": "MIT",
