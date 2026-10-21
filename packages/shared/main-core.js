@@ -7,7 +7,7 @@
 // 沒有帳號功能的 app（Codex）把 config.auth 傳成 null 即可，
 // 相關的 IPC 與設定視窗欄位就不會註冊。
 
-const { app, BrowserWindow, ipcMain, screen, shell, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, screen, shell, dialog, clipboard } = require("electron");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { prepareUpdate, launchInstaller } = require("./mac-updater");
@@ -310,6 +310,14 @@ async function offerUpdate(release) {
     updateProgressWindow = null;
     updateState = { ...updateState, installing: false, progress: null, error: error.message };
     broadcastUpdateState();
+    if (error.code === "APP_TRANSLOCATED") {
+      const { response } = await dialog.showMessageBox({
+        type: "warning", message: "需要先解除 macOS 的下載隔離，才能自動更新",
+        detail: error.message, buttons: ["複製指令", "好"], defaultId: 0, cancelId: 1
+      });
+      if (response === 0) clipboard.writeText(error.command);
+      return;
+    }
     const { response } = await dialog.showMessageBox({
       type: "error", message: "更新未完成，目前版本仍可繼續使用",
       detail: error.message, buttons: ["好", "開啟發行頁"], defaultId: 0, cancelId: 0

@@ -3,6 +3,7 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const os = require("node:os");
 const { execFile, spawn } = require("node:child_process");
 const { promisify } = require("node:util");
 const run = promisify(execFile);
@@ -136,11 +137,54 @@ async function validateBundle(bundle, { bundleId, version, arch }) {
   await run("/usr/bin/codesign", ["--verify", "--deep", "--strict", bundle], { timeout: 60000 });
 }
 
-async function prepareUpdate({ release, currentVersion, executable, options, repo, arch, onProgress = () => {} }) {
+// 從瀏覽器下載的 App 帶有隔離標記，macOS 會把它搬到唯讀的 AppTranslocation 位置執行，
+// 就算 App 本身在 /Applications 也一樣；拿掉標記、重開後才能自動更新。
+function translocationError(target) {
+  const command = `xattr -dr com.apple.quarantine "/Applications/${path.basename(target)}"`;
+  const error = new Error(
+    "macOS 把這個 App 放在隔離的唯讀位置執行（從瀏覽器下載的 App 會這樣），所以無法自動更新。\n"
+    + `請在終端機執行：\n${command}\n然後結束並重新打開 App，再按一次更新。`
+  );
+  error.code = "APP_TRANSLOCATED";
+  error.command = command;
+  return error;
+}
+
+async function prepareUpdate({ release, currentVersion, executable, options, repo, arch, onProgress = () => {},
+  applicationRoots = ["/Applications", path.join(os.homedir(), "Applications")] }) {
   if (process.platform !== "darwin") throw new Error("自動安裝僅支援 macOS");
   if (!isNewerVersion(release.version, currentVersion)) throw new Error("此版本不是較新的版本");
-  const target = await fs.realpath(path.resolve(path.dirname(executable), "../.."));
-  if (!target.endsWith(".app") || target.startsWith("/Volumes/") || target.includes("/AppTranslocation/")) {
+  let target = await fs.realpath(path.resolve(path.dirname(executable), "../.."));
+  if (target.includes("/AppTranslocation/")) {
+    const translocated = target;
+    let original;
+    for (const root of applicationRoots) {
+      const candidate = path.join(root, path.basename(translocated));
+      try {
+        const stat = await fs.lstat(candidate);
+        if (stat.isSymbolicLink()) continue;
+        if (!(await fs.stat(candidate)).isDirectory()) continue;
+        if (!candidate.endsWith(".app")) continue;
+        if (await plistValue(candidate, "CFBundleIdentifier") !== options.bundleId) continue;
+        if (await plistValue(candidate, "CFBundleShortVersionString") !== currentVersion) continue;
+        original = candidate;
+        break;
+      } catch {
+        // 不存在、無法讀取或 plist 無效的候選都不可修改，繼續找下一個位置。
+      }
+    }
+    if (!original) throw translocationError(translocated);
+    try {
+      // prepareUpdate 只在使用者同意「更新並重新啟動」後呼叫，不經 shell。
+      await run("/usr/bin/xattr", ["-dr", "com.apple.quarantine", original], { timeout: 30000 });
+    } catch (failure) {
+      const error = translocationError(translocated);
+      error.message += `\n自動解除隔離失敗：${failure.message}`;
+      throw error;
+    }
+    target = original;
+  }
+  if (!target.endsWith(".app") || target.startsWith("/Volumes/")) {
     throw new Error("請先把 App 移到 Applications 或可寫入的資料夾，再執行更新");
   }
   if (await plistValue(target, "CFBundleIdentifier") !== options.bundleId) throw new Error("目前 App 身分不符，無法自動替換");
@@ -226,4 +270,4 @@ async function launchInstaller(prepared) {
   }
 }
 
-module.exports = { selectUpdateAssets, checksumFor, downloadAsset, acquireUpdateLock, supportsArchitecture, validateBundle, prepareUpdate, launchInstaller };
+module.exports = { translocationError, selectUpdateAssets, checksumFor, downloadAsset, acquireUpdateLock, supportsArchitecture, validateBundle, prepareUpdate, launchInstaller };

@@ -7,7 +7,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const vm = require("node:vm");
 const { createRequire } = require("node:module");
-const { selectUpdateAssets, checksumFor, downloadAsset, acquireUpdateLock, supportsArchitecture } = require("../shared/mac-updater");
+const { selectUpdateAssets, checksumFor, downloadAsset, acquireUpdateLock, supportsArchitecture, prepareUpdate, translocationError } = require("../shared/mac-updater");
 const { installUpdate } = require("../shared/update-installer");
 
 const repo = "michelle0812/claude-codex-quota-mac";
@@ -140,13 +140,177 @@ async function verifyConsent() {
   }
 }
 
+// 從瀏覽器下載的 App 被 macOS 搬到 AppTranslocation 執行：要回專屬錯誤與可複製的 xattr 指令。
+async function verifyTranslocation(root) {
+  const bundle = path.join(root, "AppTranslocation", "C072EDE1", "d", "Claude 額度.app");
+  await fs.mkdir(path.join(bundle, "Contents", "MacOS"), { recursive: true });
+  const executable = path.join(bundle, "Contents", "MacOS", "Claude 額度");
+  await fs.writeFile(executable, "");
+  await assert.rejects(
+    prepareUpdate({ release, currentVersion: "1.2.1", executable, options: { ...options, dataDir: root }, repo, arch: "arm64", applicationRoots: [path.join(root, "absent-Applications")] }),
+    (error) => error.code === "APP_TRANSLOCATED"
+      && error.command === 'xattr -dr com.apple.quarantine "/Applications/Claude 額度.app"'
+      && error.message.includes(error.command)
+  );
+}
+
+// 只讓檔案系統操作落在暫存目錄；下載、掛載、簽章與 xattr 都用可觀察的替身。
+async function verifyTranslocationRecovery(root) {
+  const filename = path.resolve(__dirname, "../shared/mac-updater.js");
+  const source = await fs.readFile(filename, "utf8");
+  const realRequire = createRequire(filename);
+  for (const scenario of ["system", "home", "priority", "skip-invalid", "id", "version", "symlink", "missing", "file", "suffix", "plist", "xattr"]) {
+    const base = await fs.mkdtemp(path.join(root, "recovery-"));
+    const name = scenario === "suffix" ? "測試 額度.bundle" : "測試 額度.app";
+    const bundle = path.join(base, "AppTranslocation", "UUID", "d", name);
+    const executable = path.join(bundle, "Contents/MacOS/Test");
+    await fs.mkdir(path.dirname(executable), { recursive: true });
+    await fs.writeFile(executable, "running");
+    const roots = [path.join(base, "Applications"), path.join(base, "home/Applications")];
+    const candidates = roots.map((dir) => path.join(dir, name));
+    const id = "test.quota.widget";
+    const plists = new Map();
+    async function makeBundle(location, version = "1.2.1", bundleId = id) {
+      await fs.mkdir(path.join(location, "Contents/MacOS"), { recursive: true });
+      const binary = Buffer.alloc(8);
+      binary.writeUInt32LE(0xfeedfacf, 0); binary.writeUInt32LE(0x0100000c, 4);
+      await fs.writeFile(path.join(location, "Contents/MacOS/Test"), binary);
+      plists.set(location, { CFBundleIdentifier: bundleId, CFBundleShortVersionString: version, CFBundleExecutable: "Test" });
+    }
+    if (scenario === "missing") plists.set(candidates[0], { CFBundleIdentifier: id, CFBundleShortVersionString: "1.2.1" });
+    if (scenario !== "missing") {
+      const candidate = candidates[scenario === "home" ? 1 : 0];
+      if (scenario === "file") {
+        await fs.mkdir(path.dirname(candidate), { recursive: true });
+        await fs.writeFile(candidate, "not a bundle");
+        plists.set(candidate, { CFBundleIdentifier: id, CFBundleShortVersionString: "1.2.1" });
+      } else if (scenario === "symlink") {
+        const linked = path.join(base, "linked.app");
+        await makeBundle(linked);
+        await fs.mkdir(path.dirname(candidate), { recursive: true });
+        await fs.symlink(linked, candidate);
+        plists.set(candidate, plists.get(linked));
+      } else {
+        await makeBundle(candidate, scenario === "version" ? "0.0.1" : "1.2.1", ["id", "skip-invalid"].includes(scenario) ? "other.id" : id);
+        if (scenario === "plist") plists.delete(candidate);
+      }
+    }
+    if (["priority", "skip-invalid"].includes(scenario)) await makeBundle(candidates[1]);
+    const xattrs = [];
+    const hash = crypto.createHash("sha256").update("abc").digest("hex");
+    const sums = `${hash}  CodexQuota-1.2.2-macOS-arm.dmg\n`;
+    const testRelease = structuredClone(release);
+    testRelease.assets.find((a) => a.name === "SHA256SUMS.txt").size = Buffer.byteLength(sums);
+    let downloads = 0;
+    const fakeRun = async (command, args) => {
+      if (command === "/usr/libexec/PlistBuddy") {
+        const location = path.dirname(path.dirname(args[2]));
+        const key = args[1].replace("Print :", "");
+        const value = plists.get(location)?.[key];
+        if (value === undefined) throw new Error("invalid plist");
+        return { stdout: value + "\n" };
+      }
+      if (command === "/usr/bin/xattr") {
+        xattrs.push([...args]);
+        if (scenario === "xattr") throw new Error("permission denied: test xattr");
+      } else if (command === "/usr/bin/hdiutil") {
+        if (args[0] === "attach") await makeBundle(path.join(args[4], "Test.app"), "1.2.2");
+      } else if (command === "/usr/bin/ditto") {
+        await fs.cp(args[0], args[1], { recursive: true });
+        plists.set(args[1], plists.get(args[0]));
+      } else if (command !== "/usr/bin/codesign") throw new Error(`unexpected command: ${command}`);
+      return { stdout: "" };
+    };
+    const context = vm.createContext({
+      module: { exports: {} }, process, console, __dirname: path.dirname(filename),
+      setTimeout, clearTimeout, AbortController, URL,
+      fetch: async (url) => {
+        assert.equal(xattrs.length, 1, "下載前應已解除隔離");
+        downloads += 1;
+        return new Response(String(url).endsWith("SHA256SUMS.txt") ? sums : "abc");
+      },
+      require: (name) => name === "node:util" ? { promisify: () => fakeRun } : realRequire(name)
+    });
+    vm.runInContext(source, context, { filename });
+    const promise = context.module.exports.prepareUpdate({
+      release: testRelease, currentVersion: "1.2.1", executable,
+      options: { ...options, bundleId: id, productName: "Test", dataDir: path.join(base, "data") },
+      repo, arch: "arm64", applicationRoots: roots
+    });
+    if (["system", "home", "priority", "skip-invalid"].includes(scenario)) {
+      const prepared = await promise;
+      const target = candidates[["home", "skip-invalid"].includes(scenario) ? 1 : 0];
+      assert.deepEqual(xattrs, [["-dr", "com.apple.quarantine", target]], scenario);
+      assert.equal(downloads, 2);
+      assert.equal(prepared.manifest.target, target);
+      assert.equal(prepared.manifest.executable, await fs.realpath(executable));
+      assert.equal(path.dirname(prepared.stageDir), path.dirname(target));
+      assert.equal(path.dirname(path.dirname(prepared.manifest.staged)), path.dirname(target));
+      assert.equal(path.dirname(prepared.manifest.backup), path.dirname(prepared.manifest.staged));
+      assert.deepEqual(JSON.parse(await fs.readFile(prepared.manifestFile, "utf8")), JSON.parse(JSON.stringify(prepared.manifest)));
+    } else {
+      await assert.rejects(promise, (error) => error.code === "APP_TRANSLOCATED"
+        && error.message.includes(error.command)
+        && (scenario !== "xattr" || error.message.includes("permission denied: test xattr")), scenario);
+      assert.equal(xattrs.length, scenario === "xattr" ? 1 : 0, scenario);
+      assert.equal(downloads, 0, scenario);
+    }
+    console.log(`Verified translocation recovery: ${scenario}`);
+  }
+}
+
+async function verifyTranslocationDialog() {
+  const filename = path.resolve(__dirname, "../shared/main-core.js");
+  const realRequire = createRequire(filename);
+  const source = await fs.readFile(filename, "utf8");
+  const error = translocationError("/private/var/folders/x/T/AppTranslocation/A/d/Codex 額度.app");
+  const prompts = [];
+  let copied = null;
+  let opened = 0;
+  class Window {
+    constructor() { this.webContents = { on() {}, send() {} }; }
+    loadFile() { return Promise.resolve(); }
+    isDestroyed() { return false; }
+    destroy() {}
+  }
+  const context = vm.createContext({
+    module: { exports: {} }, process, console, setTimeout, clearTimeout,
+    require(name) {
+      if (name === "electron") return {
+        app: { isPackaged: true, getVersion: () => "1.2.1", getName: () => "test", quit() {} },
+        BrowserWindow: Window,
+        shell: { openExternal: async () => { opened += 1; } },
+        clipboard: { writeText: (text) => { copied = text; } },
+        dialog: { showMessageBox: async (box) => { prompts.push(box); return { response: 0 }; } }
+      };
+      if (name === "./update-check") return { ...realRequire(name), fetchLatestRelease: async () => release };
+      if (name === "./mac-updater") return {
+        prepareUpdate: async () => { throw error; },
+        launchInstaller: async () => { throw new Error("不應啟動安裝"); }
+      };
+      return realRequire(name);
+    }
+  });
+  vm.runInContext(source, context, { filename });
+  vm.runInContext('config = { updater: { isDefault: true }, rendererHtmlPath: "/tmp/renderer.html" };', context);
+  await vm.runInContext('runUpdateCheck({ notify: true })', context);
+  assert.equal(prompts.length, 2);
+  assert.deepEqual([...prompts[1].buttons], ["複製指令", "好"]);
+  assert.match(prompts[1].detail, /xattr -dr com\.apple\.quarantine "\/Applications\/Codex 額度\.app"/);
+  assert.equal(copied, error.command);
+  assert.equal(opened, 0, "隔離情況不該導去發行頁");
+}
+
 (async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "quota-updater-test-"));
   try {
     await verifyAssetsAndDownload(root);
     for (const failure of [null, "busy", "rename", "launch"]) await verifyInstall(root, failure);
     await verifyConsent();
-    console.log("Verified updater: consent, platform assets, download integrity, lock, install, rollback, and account preservation.");
+    await verifyTranslocation(root);
+    await verifyTranslocationRecovery(root);
+    await verifyTranslocationDialog();
+    console.log("Verified updater: consent, translocation guidance, platform assets, download integrity, lock, install, rollback, and account preservation.");
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
