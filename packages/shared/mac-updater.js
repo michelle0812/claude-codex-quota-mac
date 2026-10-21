@@ -240,6 +240,30 @@ async function prepareUpdate({ release, currentVersion, executable, options, rep
   }
 }
 
+// 舊版更新器不會清 .quota-update-*：主面板啟動時清掉「這個 App」已完成的暫存。
+// 只要舊版備份可能是唯一一份（版本沒升上去且 previous.app 還在）、鎖還在、或掛載點還掛著，就保留。
+async function cleanupStaleUpdateDirs({ executable, currentVersion, removeStageDir = require("./update-installer").removeStageDir }) {
+  const appPath = await fs.realpath(path.resolve(path.dirname(executable), "../.."));
+  if (!appPath.endsWith(".app") || appPath.includes("/AppTranslocation/")) return [];
+  const parent = path.dirname(appPath);
+  const removed = [];
+  for (const name of await fs.readdir(parent).catch(() => [])) {
+    if (!name.startsWith(".quota-update-")) continue;
+    const dir = path.join(parent, name);
+    try {
+      const manifest = JSON.parse(await fs.readFile(path.join(dir, "install.json"), "utf8"));
+      if (manifest.target !== appPath) continue;
+      if (manifest.lockFile && await fs.access(manifest.lockFile).then(() => true, () => false)) continue;
+      const backupExists = await fs.access(path.join(dir, "previous.app")).then(() => true, () => false);
+      if (manifest.version !== currentVersion && backupExists) continue;
+      if (await removeStageDir(dir)) removed.push(dir);
+    } catch {
+      // 沒有 install.json 或讀不懂的資料夾不是我們能確認的東西，不碰。
+    }
+  }
+  return removed;
+}
+
 async function launchInstaller(prepared) {
   const log = await fs.open(path.join(prepared.stageDir, "install.log"), "a", 0o600);
   let child;
@@ -270,4 +294,4 @@ async function launchInstaller(prepared) {
   }
 }
 
-module.exports = { translocationError, selectUpdateAssets, checksumFor, downloadAsset, acquireUpdateLock, supportsArchitecture, validateBundle, prepareUpdate, launchInstaller };
+module.exports = { cleanupStaleUpdateDirs, translocationError, selectUpdateAssets, checksumFor, downloadAsset, acquireUpdateLock, supportsArchitecture, validateBundle, prepareUpdate, launchInstaller };

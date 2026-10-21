@@ -49,6 +49,18 @@ async function stopInstances(manifest) {
   throw new Error("其他面板尚未結束，已取消更新；舊版未變更。");
 }
 
+// 安裝成功、新版也啟動後，整個 .quota-update-* 暫存（含舊版備份）就沒用了。
+// 只刪名稱正確、且下載用的掛載點沒有還掛著的資料夾。
+async function removeStageDir(stageDir) {
+  if (!path.basename(stageDir).startsWith(".quota-update-")) return false;
+  const volume = path.join(stageDir, "volume");
+  const [stageStat, volumeStat] = await Promise.all([fs.stat(stageDir), fs.stat(volume).catch(() => null)]);
+  if (volumeStat && volumeStat.dev !== stageStat.dev) return false;
+  // 不用 fs.rm：在 Electron 裡 .asar 會被當成資料夾，舊版備份的 app.asar 刪不掉。
+  await run("/bin/rm", ["-rf", stageDir], { timeout: 120000 });
+  return true;
+}
+
 async function installUpdate(manifest, dependencies = {}) {
   const rename = dependencies.rename || fs.rename;
   const stop = dependencies.stopInstances || stopInstances;
@@ -58,8 +70,9 @@ async function installUpdate(manifest, dependencies = {}) {
     return run("/usr/bin/open", ["-n", target, "--args", ...(manifest.launchArgs || [])], { timeout: 15000, env });
   });
   const report = dependencies.report || (async (result) => {
-    await fs.writeFile(manifest.resultFile, JSON.stringify({ ...result, backup: manifest.backup }), { mode: 0o600 });
+    await fs.writeFile(manifest.resultFile, JSON.stringify(result.ok ? result : { ...result, backup: manifest.backup }), { mode: 0o600 });
   });
+  const cleanup = dependencies.cleanup || removeStageDir;
   let backedUp = false;
   let installed = false;
   try {
@@ -71,6 +84,7 @@ async function installUpdate(manifest, dependencies = {}) {
     await launch(manifest.target);
     // 記錄失敗不應把已成功啟動的新版換回去。
     await report({ ok: true, version: manifest.version }).catch(() => {});
+    await cleanup(path.dirname(manifest.staged)).catch(() => {});
   } catch (error) {
     let recoveryError = null;
     try {
@@ -101,4 +115,4 @@ async function main() {
 
 if (require.main === module) main().catch((error) => { console.error(error); process.exitCode = 1; });
 
-module.exports = { installUpdate, matchingProcesses };
+module.exports = { installUpdate, matchingProcesses, removeStageDir };

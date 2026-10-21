@@ -79,10 +79,10 @@ require(${JSON.stringify(path.resolve(__dirname, "../shared/mac-updater.js"))}).
     assert.ok(restarted.args.includes(manifest.launchArgs[0]));
     assert.equal(await fs.readFile(stopped, "utf8"), "yes", "額外面板必須結束");
     assert.equal(await fs.readFile(path.join(root, "account.json"), "utf8"), "untouched");
-    await fs.access(manifest.backup);
+    await waitFor(async () => fs.access(stageDir).then(() => false, () => true));
     assert.equal(parent.exitCode, 0);
     succeeded = true;
-    console.log("Verified macOS integration: detached Electron installer, all panels stopped, bundle replaced, GUI restarted, backup and account preserved.");
+    console.log("Verified macOS integration: detached Electron installer, all panels stopped, bundle replaced, GUI restarted, stage removed, account preserved.");
   } finally {
     if (parent && parent.exitCode === null) parent.kill();
     if (extra && extra.exitCode === null) extra.kill();

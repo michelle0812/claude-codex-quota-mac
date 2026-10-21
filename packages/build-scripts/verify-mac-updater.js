@@ -7,8 +7,9 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const vm = require("node:vm");
 const { createRequire } = require("node:module");
-const { selectUpdateAssets, checksumFor, downloadAsset, acquireUpdateLock, supportsArchitecture, prepareUpdate, translocationError } = require("../shared/mac-updater");
-const { installUpdate } = require("../shared/update-installer");
+const { selectUpdateAssets, checksumFor, downloadAsset, acquireUpdateLock, supportsArchitecture, prepareUpdate, translocationError, cleanupStaleUpdateDirs } = require("../shared/mac-updater");
+const { installUpdate, removeStageDir } = require("../shared/update-installer");
+const run = require("node:util").promisify(require("node:child_process").execFile);
 
 const repo = "michelle0812/claude-codex-quota-mac";
 const asset = (name) => ({ name, size: 3, url: `https://github.com/${repo}/releases/download/v1.2.2/${name}` });
@@ -67,9 +68,10 @@ async function verifyAssetsAndDownload(root) {
 async function verifyInstall(root, failure) {
   const base = await fs.mkdtemp(path.join(root, "install-"));
   const target = path.join(base, "現有 App.app");
-  const staged = path.join(base, "new.app");
-  const backup = path.join(base, "previous.app");
-  await fs.mkdir(target); await fs.mkdir(staged);
+  const stage = path.join(base, ".quota-update-test");
+  const staged = path.join(stage, "new.app");
+  const backup = path.join(stage, "previous.app");
+  await fs.mkdir(target); await fs.mkdir(stage); await fs.mkdir(staged);
   await fs.writeFile(path.join(target, "version"), "old");
   await fs.writeFile(path.join(staged, "version"), "new");
   const data = path.join(base, "account.json");
@@ -90,7 +92,83 @@ async function verifyInstall(root, failure) {
   assert.equal(result.ok, !failure);
   assert.equal(await fs.readFile(path.join(target, "version"), "utf8"), failure ? "old" : "new");
   assert.equal(await fs.readFile(data, "utf8"), "keep-account");
-  if (!failure) assert.equal(await fs.readFile(path.join(backup, "version"), "utf8"), "old");
+  const stageExists = await fs.access(stage).then(() => true, () => false);
+  assert.equal(stageExists, Boolean(failure), failure ? "失敗時保留暫存供排查" : "成功後必須清掉暫存與舊版備份");
+}
+
+// 啟動時清舊版更新器留下的 .quota-update-*：只清這個 App、已完成、沒鎖、沒掛載的。
+async function verifyStaleCleanup(root) {
+  const base = await fs.realpath(await fs.mkdtemp(path.join(root, "apps-")));
+  const app = path.join(base, "Claude 額度.app");
+  await fs.mkdir(path.join(app, "Contents", "MacOS"), { recursive: true });
+  const executable = path.join(app, "Contents", "MacOS", "Claude 額度");
+  await fs.writeFile(executable, "");
+  const make = async (name, manifest, { backup = true, extra } = {}) => {
+    const dir = path.join(base, name);
+    await fs.mkdir(path.join(dir, "volume"), { recursive: true });
+    if (backup) await fs.mkdir(path.join(dir, "previous.app"));
+    if (manifest) await fs.writeFile(path.join(dir, "install.json"), JSON.stringify(manifest));
+    if (extra) await extra(dir);
+    return dir;
+  };
+  const lock = path.join(base, "held.lock");
+  await fs.writeFile(lock, "1");
+  const done = await make(".quota-update-done", { target: app, version: "1.2.8" });
+  const doneOld = await make(".quota-update-old", { target: app, version: "1.2.7" }, { backup: false });
+  const failedKeep = await make(".quota-update-failed", { target: app, version: "1.2.9" });
+  const otherApp = await make(".quota-update-other", { target: path.join(base, "Codex 額度.app"), version: "1.2.8" });
+  const locked = await make(".quota-update-locked", { target: app, version: "1.2.8", lockFile: lock });
+  const unknown = await make(".quota-update-unknown", null);
+  const notOurs = await make("not-quota", { target: app, version: "1.2.8" });
+  const mounted = [];
+  const removed = await cleanupStaleUpdateDirs({
+    executable, currentVersion: "1.2.8",
+    removeStageDir: async (dir) => {
+      if (dir === done) { mounted.push(dir); return false; }
+      await fs.rm(dir, { recursive: true, force: true });
+      return true;
+    }
+  });
+  assert.deepEqual(removed, [doneOld]);
+  assert.deepEqual(mounted, [done], "已完成的暫存要交給 removeStageDir（掛載中由它拒絕）");
+  for (const dir of [done, failedKeep, otherApp, locked, unknown, notOurs]) await fs.access(dir);
+  await assert.rejects(fs.access(doneOld));
+
+  // 真的 removeStageDir：名稱不對不刪、正常資料夾會刪。
+  const plain = path.join(base, "plain");
+  await fs.mkdir(plain);
+  assert.equal(await removeStageDir(plain), false);
+  await fs.access(plain);
+  assert.equal(await removeStageDir(done), true);
+  await assert.rejects(fs.access(done));
+
+  // 被 translocate 的 App 不做清理（旁邊就算有符合條件的暫存也不碰）。
+  const tlApp = path.join(await fs.realpath(root), "AppTranslocation", "X", "d", "Claude 額度.app");
+  const translocated = path.join(tlApp, "Contents", "MacOS");
+  await fs.mkdir(translocated, { recursive: true });
+  await fs.writeFile(path.join(translocated, "Claude 額度"), "");
+  const tlStage = path.join(path.dirname(tlApp), ".quota-update-tl");
+  await fs.mkdir(tlStage);
+  await fs.writeFile(path.join(tlStage, "install.json"), JSON.stringify({ target: tlApp, version: "1.2.8" }));
+  assert.deepEqual(await cleanupStaleUpdateDirs({ executable: path.join(translocated, "Claude 額度"), currentVersion: "1.2.8" }), []);
+  await fs.access(tlStage);
+
+  // 掛載點還掛著時絕不遞迴刪除。
+  if (process.platform === "darwin") {
+    const stage = path.join(base, ".quota-update-mounted");
+    const volume = path.join(stage, "volume");
+    await fs.mkdir(volume, { recursive: true });
+    const image = path.join(root, "mounted-test.dmg");
+    await run("/usr/bin/hdiutil", ["create", "-size", "1m", "-fs", "HFS+", "-volname", "qtest", image]);
+    await run("/usr/bin/hdiutil", ["attach", "-nobrowse", "-mountpoint", volume, image]);
+    try {
+      assert.equal(await removeStageDir(stage), false, "掛載中不可刪");
+      await fs.access(stage);
+    } finally {
+      await run("/usr/bin/hdiutil", ["detach", volume]);
+    }
+    assert.equal(await removeStageDir(stage), true);
+  }
 }
 
 async function verifyConsent() {
@@ -306,11 +384,12 @@ async function verifyTranslocationDialog() {
   try {
     await verifyAssetsAndDownload(root);
     for (const failure of [null, "busy", "rename", "launch"]) await verifyInstall(root, failure);
+    await verifyStaleCleanup(root);
     await verifyConsent();
     await verifyTranslocation(root);
     await verifyTranslocationRecovery(root);
     await verifyTranslocationDialog();
-    console.log("Verified updater: consent, translocation guidance, platform assets, download integrity, lock, install, rollback, and account preservation.");
+    console.log("Verified updater: consent, translocation guidance, platform assets, download integrity, lock, install, rollback, stage cleanup, and account preservation.");
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }

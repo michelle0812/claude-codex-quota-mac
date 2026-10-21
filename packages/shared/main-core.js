@@ -10,7 +10,7 @@
 const { app, BrowserWindow, ipcMain, screen, shell, dialog, clipboard } = require("electron");
 const fs = require("node:fs/promises");
 const path = require("node:path");
-const { prepareUpdate, launchInstaller } = require("./mac-updater");
+const { prepareUpdate, launchInstaller, cleanupStaleUpdateDirs } = require("./mac-updater");
 const { QuotaStore } = require("./quota-store");
 const { DEFAULT_WIDGET_SETTINGS, normalizeWidgetSettings } = require("./widget-settings");
 const { COMPACT_LAYOUT } = require("./compact-layout");
@@ -194,6 +194,11 @@ async function startApp() {
   quotaStore.refreshNow("startup").catch(() => {});
 
   await showPreviousUpdateFailure();
+  if (config.updater?.isDefault && app.isPackaged) {
+    cleanupStaleUpdateDirs({ executable: process.execPath, currentVersion: app.getVersion() })
+      .then((removed) => { if (removed.length > 0) console.log(`已清除更新暫存：${removed.join(", ")}`); })
+      .catch((error) => console.warn(`清除更新暫存失敗：${error.message}`));
+  }
   applyAutoUpdatePreference(signalSettings.autoUpdateCheck);
 
   // 沒有 Dock 圖示也沒有選單列圖示：App 已經在跑時再從 Finder / Spotlight 打開，
