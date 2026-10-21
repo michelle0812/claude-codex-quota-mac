@@ -11,7 +11,7 @@ const CREDENTIALS_FILE_NAME = "grok-web-credentials.json";
 const CREDENTIALS_VERSION = 1;
 
 const CHROME_USER_AGENT =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
 const ALLOWED_LOGIN_DOMAINS = [
   "grok.com",
@@ -20,7 +20,10 @@ const ALLOWED_LOGIN_DOMAINS = [
   "x.com",
   "auth.x.ai",
   "accounts.google.com",
-  "appleid.apple.com"
+  "appleid.apple.com",
+  "cloudflare.com",
+  "challenges.cloudflare.com",
+  "turnstile.cloudflare.com"
 ];
 
 let credentialsFilePath = null;
@@ -139,16 +142,21 @@ function isAllowedLoginUrl(url) {
 
 function captureWebSession() {
   return new Promise((resolve, reject) => {
+    session.defaultSession.setUserAgent(CHROME_USER_AGENT);
+
     const loginWin = new BrowserWindow({
-      width: 1020,
-      height: 740,
+      width: 1040,
+      height: 760,
       title: "登入 Grok (grok.com)",
       autoHideMenuBar: true,
       webPreferences: {
         nodeIntegration: false,
-        contextIsolation: true
+        contextIsolation: true,
+        preload: path.join(__dirname, "stealth-preload.js")
       }
     });
+
+    loginWin.webContents.setUserAgent(CHROME_USER_AGENT);
 
     let settled = false;
     let pollTimer = null;
@@ -183,7 +191,13 @@ function captureWebSession() {
       }
     });
 
-    loginWin.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+    loginWin.webContents.setWindowOpenHandler(({ url }) => {
+      if (isAllowedLoginUrl(url)) {
+        loginWin.loadURL(url);
+      }
+      return { action: "deny" };
+    });
+
     loginWin.on("closed", () => finish(reject, new Error("登入視窗已關閉")));
     loginWin.loadURL(LOGIN_URL, { userAgent: CHROME_USER_AGENT });
   });
@@ -198,15 +212,20 @@ async function login() {
 
 function fetchWebRateLimitsViaWindow() {
   return new Promise((resolve, reject) => {
+    session.defaultSession.setUserAgent(CHROME_USER_AGENT);
+
     const win = new BrowserWindow({
       width: 800,
       height: 600,
       show: false,
       webPreferences: {
         nodeIntegration: false,
-        contextIsolation: true
+        contextIsolation: true,
+        preload: path.join(__dirname, "stealth-preload.js")
       }
     });
+
+    win.webContents.setUserAgent(CHROME_USER_AGENT);
 
     const timer = setTimeout(() => {
       if (!win.isDestroyed()) win.destroy();
