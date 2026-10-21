@@ -379,7 +379,31 @@ npm run build:codex
 > 所以 `package.json` 的 `mac.target` 只寫 `"dmg"`、**不要**加 `arch` 陣列：寫了 `arch: ["arm64", "x64"]`
 > 的話，`--arm64` / `--x64` 會被忽略，每次都兩個架構一起打，又回到互搶。
 
-建置不做 Apple Developer ID 簽章或公證，一律 ad-hoc 簽章。
+建置不做 Apple Developer ID 簽章或公證。發布改用固定的專案自簽身分，CN 為
+`Quota Widgets Code Signing`，不含 Apple ID email。首次設定由當家的在母艦的互動式終端機親手執行：
+
+```bash
+bash scripts/create-signing-identity.sh
+```
+
+腳本建立十年有效的 code signing 憑證、匯入登入鑰匙圈，並經 GUI 授權設定
+**user domain、僅 codeSign** 的信任；這只在建置機設定，使用者端不必安裝憑證。
+加密 `.p12` 備份放在 `~/Documents/quota-signing/`（目錄 700、檔案 600），
+密碼互動輸入且不經命令列或環境變數。請另存安全離線備份；換建置機應還原同一身分，勿重建。
+已存在同名憑證時腳本停止；若中途取消，請檢查鑰匙圈與備份後人工復原。
+匯入時以 `-T /usr/bin/codesign` 授權私鑰，不廣泛開放其他程式。
+
+預設尋找該名稱，也可用 `QUOTA_SIGN_IDENTITY` 指定完整名稱或 SHA-1；實際以唯一 SHA-1 簽章，避免名稱模糊比對。
+一般建置找不到有效身分時會明顯警告並退回 ad-hoc。
+`npm run build-release` 找不到身分就停止；建置中的身分遺失、驗證失敗也會停止。
+`--skip-build` 仍檢查既有 App 與 DMG 內 App 的簽章及固定憑證 DR，禁止收錄 ad-hoc 產物。
+簽章後執行 `codesign --verify --deep --strict` 並印出 DR，固定簽章必須綁憑證且不得含 cdhash。
+
+驗收：`npm run test:signing`；突變測試：`npm run test:signing:mutations`。
+首次由 ad-hoc 更新成自簽時，Claude／Grok 仍可能再詢問一次鑰匙圈密碼；
+後續需維持同一憑證、私鑰與 bundle identifier 才能維持 DR。
+自簽不等於 Apple 公證，原有 Gatekeeper 開啟流程仍適用。
+本次更新器維持既有簽章完整性驗證，未加入新舊 DR 相等檢查，以容許首次遷移。
 
 ## 已知限制
 

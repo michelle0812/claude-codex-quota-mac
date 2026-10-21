@@ -30,6 +30,8 @@
     "test:codex": "npm --prefix apps/codex test",
     "test:google": "npm --prefix apps/google test",
     "test:grok": "npm --prefix apps/grok test",
+    "test:signing": "node packages/build-scripts/verify-signing.js",
+    "test:signing:mutations": "node packages/build-scripts/verify-signing-mutations.js",
     "test:all": "npm run test:claude && npm run test:codex && npm run test:google && npm run test:grok",
     "build:claude": "npm --prefix apps/claude run build",
     "build:codex": "npm --prefix apps/codex run build",

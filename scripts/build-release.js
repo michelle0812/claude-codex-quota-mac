@@ -23,6 +23,8 @@ const crypto = require("node:crypto");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 
+const { resolveIdentity, verifyBundle } = require("../packages/build-scripts/after-pack-macos");
+
 const repoRoot = path.resolve(__dirname, "..");
 const releaseDir = path.join(repoRoot, "dist-release");
 const TAG = "[build-release]";
@@ -60,14 +62,46 @@ function version() {
   return pkg.version;
 }
 
-function main() {
+// Validate both loose bundles and DMG contents, including --skip-build artifacts.
+function verifyReleaseArtifacts(v, identity, { run = execFileSync, verify = verifyBundle } = {}) {
+  const dmgs = [];
+  for (const app of APPS) {
+    for (const arch of ARCHES) {
+      verify(path.join(repoRoot, app.dir, "dist", arch.outDir, `${app.product}.app`), identity);
+    }
+    const distDir = path.join(repoRoot, app.dir, "dist");
+    for (const name of fs.readdirSync(distDir)) {
+      if (name.endsWith(".dmg") && name.includes(`-${v}-`)) {
+        const dmg = path.join(distDir, name);
+        const mount = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "quota-verify-"));
+        let mounted = false;
+        try {
+          run("/usr/bin/hdiutil", ["attach", "-readonly", "-nobrowse", "-mountpoint", mount, dmg], { stdio: "inherit" });
+          mounted = true;
+          verify(path.join(mount, `${app.product}.app`), identity);
+        } finally {
+          if (mounted) run("/usr/bin/hdiutil", ["detach", mount], { stdio: "inherit" });
+          fs.rmdirSync(mount);
+        }
+        dmgs.push(dmg);
+      }
+    }
+  }
+  if (dmgs.length !== APPS.length * 2) throw new Error(`預期 ${APPS.length * 2} 個已簽章 dmg，實際 ${dmgs.length}`);
+}
+
+function main({ env = process.env, run = execFileSync } = {}) {
+  // Must fail before building, deleting dist-release, or assembling old artifacts.
+  const identity = resolveIdentity({ env, run, required: true });
   const skipBuild = process.argv.includes("--skip-build");
   const v = version();
   console.log(`${TAG} 版本 ${v}${skipBuild ? "（--skip-build）" : ""}`);
 
   if (!skipBuild) {
-    sh("npm", ["run", "build:all"]);
+    sh("npm", ["run", "build:all"], { env: { ...env, QUOTA_SIGN_IDENTITY: identity, QUOTA_REQUIRE_SIGNING: "1" } });
   }
+
+  verifyReleaseArtifacts(v, identity);
 
   fs.rmSync(releaseDir, { recursive: true, force: true });
   fs.mkdirSync(releaseDir, { recursive: true });
@@ -123,4 +157,5 @@ function main() {
   console.log(`  gh release create v${v} dist-release/* --title "v${v}" --notes "..."`);
 }
 
-main();
+if (require.main === module) main();
+module.exports = { main, verifyReleaseArtifacts };
