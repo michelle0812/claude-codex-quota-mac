@@ -2,16 +2,13 @@
 
 const { app, dialog, BrowserWindow } = require("electron");
 
-// 必須在 app ready 前注入：停用 Blink 自動化特徵，確保 Cloudflare Turnstile 判定為真實人類瀏覽器
-app.commandLine.appendSwitch("disable-blink-features", "AutomationControlled");
-
 // 薄殼：視窗、IPC、設定儲存等共用邏輯都在 shared-gen/main-core.js（來源是
 // packages/shared/main-core.js）。這裡負責組出 Grok (xAI) 版專屬 config。
 
 const path = require("node:path");
 const { startQuotaWidget } = require("../shared-gen/main-core");
 const { createGrokAccountService } = require("./grok-account-service");
-const grokWebService = require("./grok-web-service");
+const { createGrokOAuthService } = require("./grok-oauth-service");
 const { DEFAULT_PROFILE_ID, resolveProfile, launchExtraProfiles, reopenHooks, panelHooks } = require("./profile");
 
 const defaultUserDataPath = app.getPath("userData");
@@ -31,15 +28,11 @@ if (!isDefaultProfile) {
 }
 
 const accountService = createGrokAccountService();
+// 齒輪登入 xAI 後顯示帳號額度；失敗就報錯，不悄悄退回本機 CLI context。
+const oauthService = createGrokOAuthService({ appVersion: app.getVersion() });
 
 async function readQuota() {
-  if (await grokWebService.hasSession()) {
-    try {
-      return await grokWebService.getWebQuota();
-    } catch (error) {
-      console.warn(`grok.com 網頁讀取失敗，退回本機 CLI: ${error.message}`);
-    }
-  }
+  if (await oauthService.hasSession()) return oauthService.getQuota();
   return accountService.getQuota();
 }
 
@@ -68,13 +61,13 @@ startQuotaWidget({
     getWindow: () => BrowserWindow.getAllWindows()[0] || null
   }),
   auth: {
-    configure: (directory) => {
-      accountService.configure(directory);
-      grokWebService.configure(directory);
+    configure: async (directory) => {
+      await accountService.configure(directory);
+      await oauthService.configure(directory);
     },
-    hasSession: () => grokWebService.hasSession(),
-    login: () => grokWebService.login(),
-    logout: () => grokWebService.logout(),
+    hasSession: () => oauthService.hasSession(),
+    login: () => oauthService.login(),
+    logout: () => oauthService.logout(),
     resetQuotaOnChange: true
   }
 });

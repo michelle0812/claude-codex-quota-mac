@@ -20,27 +20,27 @@ window.APP_CONFIG = {
       brand: "Grok 額度",
       statusLoading: "正在讀取 Grok 用量...",
       statusError: "無法讀取 Grok 用量",
-      authRequired: "尚未登入 Grok，請按齒輪登入 grok.com 或在終端執行 grok login"
+      authRequired: "尚未登入 Grok，請按齒輪登入 xAI 帳號"
     },
     en: {
       brand: "Grok Quota",
       statusLoading: "Reading Grok usage...",
       statusError: "Unable to read Grok usage",
-      authRequired: "Open settings to sign in to grok.com or run grok login in terminal"
+      authRequired: "Open settings to sign in to your xAI account"
     }
   },
 
-  // 設定視窗的「grok.com 帳號用量」區塊。
+  // 設定視窗的「xAI 帳號額度」區塊：系統瀏覽器登入，不需擴充套件。
   auth: {
-    label: "grok.com 帳號用量",
+    label: "xAI 帳號額度",
     checkingText: "檢查登入狀態中…",
-    loggedInText: "已登入：優先顯示 grok.com 帳號用量與 7 天算力池",
-    loggedOutText: "未登入：顯示本機 Grok 用量；點擊登入以同步 7 天官方算力池",
-    loginLabel: "登入 grok.com",
-    logoutLabel: "登出 grok.com",
-    loginPendingText: "正在開啟 grok.com 登入視窗…",
-    loginDoneText: "已登入 grok.com",
-    logoutDoneText: "已登出 grok.com，恢復顯示本機 Grok 用量"
+    loggedInText: "已登入：顯示 xAI 帳號的週期額度（官方 billing）",
+    loggedOutText: "未登入：只顯示本機 grok CLI 的 context 使用率，不是帳號額度",
+    loginLabel: "登入 xAI 帳號",
+    logoutLabel: "登出 xAI 帳號",
+    loginPendingText: "已開啟系統瀏覽器，請在 auth.x.ai 完成登入…",
+    loginDoneText: "已登入 xAI 帳號",
+    logoutDoneText: "已登出，恢復顯示本機 CLI context（不影響 grok CLI 登入）"
   }
 };
 
