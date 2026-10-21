@@ -222,13 +222,9 @@ async function getQuota({ grokHome = DEFAULT_GROK_HOME, now = Date.now() } = {})
     primary: {
       usedPercent,
       windowDurationMins: null,
-      resetsAt: auth.expiresAt || null
+      resetsAt: null
     },
-    secondary: {
-      usedPercent: Math.min(100, Math.round((totalTokens / 10_000_000) * 100)),
-      windowDurationMins: 24 * 60,
-      resetsAt: auth.expiresAt || null
-    },
+    secondary: null,
     account: {
       id: auth.accountId,
       email: auth.email,
