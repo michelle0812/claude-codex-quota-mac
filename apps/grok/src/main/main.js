@@ -7,6 +7,7 @@ const path = require("node:path");
 const { app, dialog, BrowserWindow } = require("electron");
 const { startQuotaWidget } = require("../shared-gen/main-core");
 const { createGrokAccountService } = require("./grok-account-service");
+const grokWebService = require("./grok-web-service");
 const { DEFAULT_PROFILE_ID, resolveProfile, launchExtraProfiles, reopenHooks, panelHooks } = require("./profile");
 
 const defaultUserDataPath = app.getPath("userData");
@@ -27,6 +28,17 @@ if (!isDefaultProfile) {
 
 const accountService = createGrokAccountService();
 
+async function readQuota() {
+  if (await grokWebService.hasSession()) {
+    try {
+      return await grokWebService.getWebQuota();
+    } catch (error) {
+      console.warn(`grok.com 網頁讀取失敗，退回本機 CLI: ${error.message}`);
+    }
+  }
+  return accountService.getQuota();
+}
+
 startQuotaWidget({
   updater: {
     productName: "Grok 額度",
@@ -39,7 +51,7 @@ startQuotaWidget({
   preloadPath: path.join(__dirname, "../shared-gen/preload.js"),
   rendererHtmlPath: path.join(__dirname, "../shared-gen/renderer.html"),
   settingsHtmlPath: path.join(__dirname, "../shared-gen/settings.html"),
-  readQuota: () => accountService.getQuota(),
+  readQuota,
   panelNameHtmlPath: path.join(__dirname, "../shared-gen/panel-name.html"),
   settingsWindowTitle: profile.name ? `小工具設定 · ${profile.name}` : undefined,
   settingsWindowSize: { width: 390, height: 420 },
@@ -52,10 +64,16 @@ startQuotaWidget({
     getWindow: () => BrowserWindow.getAllWindows()[0] || null
   }),
   auth: {
-    configure: (directory) => accountService.configure(directory),
-    hasSession: () => accountService.hasSession(),
-    login: () => accountService.login(),
-    logout: () => accountService.logout(),
+    configure: (directory) => {
+      accountService.configure(directory);
+      grokWebService.configure(directory);
+    },
+    hasSession: async () => (await grokWebService.hasSession()) || (await accountService.hasSession()),
+    login: async () => grokWebService.login(),
+    logout: async () => {
+      await grokWebService.logout();
+      await accountService.logout();
+    },
     getOptions: () => accountService.getOptions(),
     setOptions: (value) => accountService.setOptions(value),
     resetQuotaOnChange: true

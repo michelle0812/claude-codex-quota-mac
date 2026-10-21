@@ -20,13 +20,13 @@ window.APP_CONFIG = {
       brand: "Grok 額度",
       statusLoading: "正在讀取 Grok 用量...",
       statusError: "無法讀取 Grok 用量",
-      authRequired: "尚未連接 Grok 帳號，請在終端執行 grok login 或按齒輪連接本機 Grok"
+      authRequired: "尚未登入 Grok，請按齒輪登入 grok.com 或在終端執行 grok login"
     },
     en: {
       brand: "Grok Quota",
       statusLoading: "Reading Grok usage...",
       statusError: "Unable to read Grok usage",
-      authRequired: "Run grok login in terminal or open settings to connect your local Grok"
+      authRequired: "Open settings to sign in to grok.com or run grok login in terminal"
     }
   },
 
@@ -35,13 +35,13 @@ window.APP_CONFIG = {
     quotaGroupChoice: false,
     label: "Grok 帳號用量",
     checkingText: "檢查登入狀態中…",
-    loggedInText: "已連接本機 Grok；登入過期時請先執行 grok login",
-    loggedOutText: "尚未連接；請先在終端機執行 grok login，再按連接本機 Grok",
-    loginLabel: "連接 Grok 帳號",
-    logoutLabel: "中斷連接",
-    loginPendingText: "正在讀取本機 Grok 憑證…",
-    loginDoneText: "已連接此面板的 Grok 帳號",
-    logoutDoneText: "已中斷此面板的連接，本機 Grok 登入保留"
+    loggedInText: "已連接 grok.com 帳號或本機 Grok",
+    loggedOutText: "尚未登入 grok.com；點擊登入以同步 7 天官方算力池",
+    loginLabel: "登入 grok.com 帳號",
+    logoutLabel: "登出 grok.com",
+    loginPendingText: "正在開啟 grok.com 登入視窗…",
+    loginDoneText: "已登入 grok.com 網頁帳號",
+    logoutDoneText: "已登出 grok.com，保留本機 Grok 連線"
   }
 };
 
