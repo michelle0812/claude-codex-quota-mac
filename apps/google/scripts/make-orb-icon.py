@@ -39,9 +39,9 @@ img = Image.alpha_composite(img, shadow)
 # --- body: dark charcoal sphere ---
 body = vgrad((S, S), (86, 88, 92), (30, 31, 34)).convert("RGBA")
 
-# --- Google Blue / Indigo liquid in the lower FILL portion ---
-# Top: (102, 157, 246) #669DF6, Bot: (26, 115, 232) #1A73E8
-liquid = vgrad((S, S), (124, 77, 255), (26, 115, 232)).convert("RGBA")
+# --- Google Light Pink liquid in the lower FILL portion ---
+# Top: (244, 166, 199) #F4A6C7, Bot: (217, 101, 139) #D9658B
+liquid = vgrad((S, S), (244, 166, 199), (217, 101, 139)).convert("RGBA")
 lmask = Image.new("L", (S, S), 0)
 ld = ImageDraw.Draw(lmask)
 water_y = int(box[1] + d * (1 - FILL))
@@ -51,7 +51,7 @@ body.paste(liquid, (0, 0), lmask)
 # meniscus highlight line
 ml = ImageDraw.Draw(body)
 ml.rectangle((0, water_y - int(S*0.006), S, water_y + int(S*0.006)),
-             fill=(210, 227, 252, 255))
+             fill=(254, 230, 240, 255))
 
 sphere = Image.new("RGBA", (S, S), (0, 0, 0, 0))
 sphere.paste(body, (0, 0), mask)

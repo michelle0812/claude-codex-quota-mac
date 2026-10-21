@@ -84,7 +84,7 @@ function verifyAppConfigOverride() {
 
   const plain = loadAppConfig("google", "");
   assert.equal(plain.copy.zh.brand, "Google 主帳號");
-  assert.equal(plain.accent.weekly, "#1A73E8");
+  assert.equal(plain.accent.weekly, "#D9658B");
 }
 
 function verifyReopenHooks() {

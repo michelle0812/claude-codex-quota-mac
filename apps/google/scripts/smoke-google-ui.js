@@ -126,10 +126,10 @@ require(${JSON.stringify(path.join(bundle, "Contents/Resources/app.asar/src/main
       assert.equal(await main.eval("document.querySelector('#quotaGroupName').textContent"), group.name);
       const values = await main.eval("['primaryText','secondaryText'].map(id=>document.getElementById(id).textContent)");
       for (const [i, window] of [group.primary,group.secondary].entries()) {
-        if (window) assert.ok(values[i].startsWith(window.usedPercent.toFixed(2)+'%'), values[i]);
+        if (window) assert.ok(values[i].startsWith(Math.round(window.usedPercent)+'%'), values[i]);
         else assert.equal(values[i], '未提供');
       }
-      assert.equal(await main.eval("document.querySelector('#remaining').textContent"), (group.primary || group.secondary).usedPercent.toFixed(2)+'%');
+      assert.equal(await main.eval("document.querySelector('#remaining').textContent"), Math.round((group.primary || group.secondary).usedPercent)+'%');
       assert.equal(await main.eval("document.querySelector('#paceBadge').textContent"), await main.eval("t('status.'+state.quota.paceAdvice.overall.status)"));
       assert.ok(await main.eval("['paceTitle','quotaGroupName','paceBadge'].map(id=>document.getElementById(id).getBoundingClientRect()).every((r,i,a)=>r.right<=innerWidth && r.left>=0 && (!i || r.left>=a[i-1].right))"), 'Heading overlaps');
       assert.ok(await main.eval("document.querySelector('footer').getBoundingClientRect().bottom <= innerHeight"));

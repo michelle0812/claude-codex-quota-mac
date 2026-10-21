@@ -1,6 +1,6 @@
 {
   "name": "google-quota-mac",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "description": "macOS AGY 額度圓球面板，點擊切換 Gemini Models、Claude and GPT Models、Gemini 4 Argon 三組額度。",
   "main": "src/main/main.js",
   "author": "michelle0812 and Google Usage Widget contributors",

@@ -3,16 +3,16 @@
 window.APP_CONFIG = {
   brandName: "Google 主帳號",
   quotaGroupCycling: true,
-  percentDigits: 2,
+  percentDigits: 0,
   compactThemeStorageKey: "googleUsageCompactTheme",
   emptyErrorCopyKey: "authRequired",
 
-  // mini bar / HUD / 玻璃球的主色。Google 經典深藍與 Gemini 靛紫，一眼分得出來。
+  // mini bar / HUD / 玻璃球的主色。淺粉紅系列。
   accent: {
-    weekly: "#1A73E8",
-    weeklyStrong: "#4285F4",
-    short: "#7C4DFF",
-    shortStrong: "#B388FF"
+    weekly: "#D9658B",
+    weeklyStrong: "#EB82A3",
+    short: "#F4A6C7",
+    shortStrong: "#FCE4EE"
   },
 
   copy: {
