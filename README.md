@@ -1,13 +1,14 @@
-# Claude 額度、Codex 額度 & Google 額度 for macOS
+# Claude 額度、Codex 額度、Google 額度 & Grok 額度 for macOS
 
-三款專為 **macOS** 打造的用量桌面小工具，以繁體中文顯示 **5 小時**與 **7 天**用量、重置時間及使用節奏。
-它們是**三個各自獨立的 App**，共用同一份 UI／HUD／節奏判斷邏輯，因此放在同一個 repo 維護。
+四款專為 **macOS** 打造的用量桌面小工具，以繁體中文顯示用量、重置時間及使用節奏。
+它們是**四個各自獨立的 App**，共用同一份 UI／HUD／節奏判斷邏輯，因此放在同一個 repo 維護。
 
 | App | 看什麼 | 資料來源 | 安裝後名稱 |
 |---|---|---|---|
 | **Claude 額度** | Claude Code 用量，**支援多個 claude.ai 帳號各一個面板** | 本機 statusLine hook，或登入 claude.ai 讀帳號級別用量 | `/Applications/Claude 額度.app` |
 | **Codex 額度** | Codex（ChatGPT 訂閱）用量，**支援多個帳號各一個面板** | 在齒輪裡登入 ChatGPT（或沿用 `codex login` 的 `~/.codex/auth.json`），直接打 OpenAI 用量 API | `/Applications/Codex 額度.app` |
 | **Google 額度** | Google (Antigravity / Gemini) 用量，**支援多帳號各一個面板** | 官方 AGY CLI `/usage` JSON；點擊圓球切換三組用量 | `/Applications/Google 額度.app` |
+| **Grok 額度** | Grok (xAI) 用量，**支援多帳號各一個面板** | 本機 `~/.grok/` 憑證與即時 Session Context Window / 累積用量 | `/Applications/Grok 額度.app` |
 
 > [!IMPORTANT]
 > **這些 App 還沒有 Apple 公證（notarization）**，所以第一次開啟會被 Gatekeeper 擋下來，
@@ -25,6 +26,7 @@
 > xattr -cr "/Applications/Claude 額度.app"
 > xattr -cr "/Applications/Codex 額度.app"
 > xattr -cr "/Applications/Google 額度.app"
+> xattr -cr "/Applications/Grok 額度.app"
 > ```
 >
 > 所有 App 都是 ad-hoc 簽章（`codesign -dv` 會顯示 `Signature=adhoc`），程式碼全部公開在這個 repo 裡，可以自行檢視或自行建置。
