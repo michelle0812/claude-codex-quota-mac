@@ -9,7 +9,7 @@
 | **Codex 額度** | Codex（ChatGPT 訂閱）用量，**支援多個帳號各一個面板** | 在齒輪裡登入 ChatGPT（或沿用 `codex login` 的 `~/.codex/auth.json`），直接打 OpenAI 用量 API | `/Applications/Codex 額度.app` |
 | **Google 額度** | Google (Antigravity / Gemini) 用量，**支援多帳號各一個面板** | 官方 AGY CLI `/usage` JSON；點擊圓球切換三組用量 | `/Applications/Google 額度.app` |
 | **Grok 額度** | Grok (xAI) 用量，**支援多帳號各一個面板** | 本機 `~/.grok/` 憑證與即時 Session Context Window / 累積用量 | `/Applications/Grok 額度.app` |
-| **Perch 額度（開發中，尚未發布）** | Roost／Manual 滾動額度與本期 PT | 唯讀沿用本機 Perch CLI 登入，查詢官方帳號用量 | `Perch 額度.app` |
+| **Perch 額度** | Roost／Manual 滾動額度與本期 PT | 唯讀沿用本機 Perch CLI 登入，查詢官方帳號用量 | `Perch 額度.app` |
 
 > [!IMPORTANT]
 > **這些 App 還沒有 Apple 公證（notarization）**，所以第一次開啟會被 Gatekeeper 擋下來，
@@ -76,7 +76,7 @@ Claude 額度額外提供：
 - 可選：登入 claude.ai，改讀帳號級別用量（不受哪台機器在跑 Claude Code 影響）
 - 多帳號：每個 claude.ai 帳號一個獨立面板，在各自的齒輪裡登入
 
-### Perch 額度（本機預覽）
+### Perch 額度（v1.3.2 起提供）
 
 在 `apps/perch` 新增獨立圓球面板，點擊圓球或按 Enter／空白鍵，依官方實際提供的資料切換：
 
@@ -95,7 +95,7 @@ npm run test:perch
 npm --prefix apps/perch run test:ui
 ```
 
-UI 測試使用隔離資料目錄、合成憑證及模擬回應，不存取真實帳號。`test:ui` 預設借用既有 Codex Electron runtime，也可傳入 Electron 執行檔路徑。2026-10-27 已通過五款 App 回歸測試、打包後畫面測試與本機 ARM App 建置。在 App 相同的 Electron runtime 直接查詢全新官方回應，已驗證 Pro 帳號的 Roost、Manual 與本期 PT，且比對確認查詢前後 CLI 憑證完全未變；一般 Node.js 查詢曾逾時，連線驗收以實際 Electron runtime 為準。Perch 尚未包含在公開 Release 中；開發預覽採 ad-hoc 簽章，正式發布仍須在母艦以固定憑證建置。
+UI 測試使用隔離資料目錄、合成憑證及模擬回應，不存取真實帳號。`test:ui` 預設借用既有 Codex Electron runtime，也可傳入 Electron 執行檔路徑。2026-10-27 已通過五款 App 回歸測試、打包後畫面測試與本機 ARM App 建置。在 App 相同的 Electron runtime 直接查詢全新官方回應，已驗證 Pro 帳號的 Roost、Manual 與本期 PT，且比對確認查詢前後 CLI 憑證完全未變；一般 Node.js 查詢曾逾時，連線驗收以實際 Electron runtime 為準。Perch 自 v1.3.2 納入正式發布，與其他四款 App 一同由母艦使用固定憑證簽署；ARM／Intel 各有獨立 DMG 與五合一 ZIP。
 
 ## 畫面
 
