@@ -33,12 +33,13 @@ const APPS = [
   { dir: "apps/claude", product: "Claude 額度" },
   { dir: "apps/codex", product: "Codex 額度" },
   { dir: "apps/google", product: "Google 額度" },
-  { dir: "apps/grok", product: "Grok 額度" }
+  { dir: "apps/grok", product: "Grok 額度" },
+  { dir: "apps/perch", product: "Perch 額度" }
 ];
 
 // electron-builder 的 mac 輸出目錄：arm64 在 mac-arm64/，x64 在 mac/。
 function combinedZipName(v, key) {
-  return `ClaudeCodexGoogleGrokQuota-${v}-macOS-${key}.zip`;
+  return `ClaudeCodexGoogleGrokPerchQuota-${v}-macOS-${key}.zip`;
 }
 
 const ARCHES = [

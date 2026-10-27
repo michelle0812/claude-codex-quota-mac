@@ -1,7 +1,7 @@
 {
   "name": "claude-codex-quota-mac",
   "version": "1.3.1",
-  "description": "Claude 額度、Codex 額度、Google 額度與 Grok 額度四個 macOS 桌面小工具的合併 repo。",
+  "description": "Claude、Codex、Google、Grok 與 Perch 五個 macOS 用量面板。",
   "private": true,
   "license": "MIT",
   "author": "michelle0812",
@@ -21,7 +21,7 @@
     "install:codex": "npm --prefix apps/codex install",
     "install:google": "npm --prefix apps/google install",
     "install:grok": "npm --prefix apps/grok install",
-    "install:all": "npm run install:claude && npm run install:codex && npm run install:google && npm run install:grok",
+    "install:all": "npm run install:claude && npm run install:codex && npm run install:google && npm run install:grok && npm run install:perch",
     "start:claude": "npm run heal-electron && npm --prefix apps/claude run start",
     "start:codex": "npm run heal-electron && npm --prefix apps/codex run start",
     "start:google": "npm run heal-electron && npm --prefix apps/google run start",
@@ -32,12 +32,16 @@
     "test:grok": "npm --prefix apps/grok test",
     "test:signing": "node packages/build-scripts/verify-signing.js",
     "test:signing:mutations": "node packages/build-scripts/verify-signing-mutations.js",
-    "test:all": "npm run test:claude && npm run test:codex && npm run test:google && npm run test:grok",
+    "test:all": "npm run test:claude && npm run test:codex && npm run test:google && npm run test:grok && npm run test:perch",
     "build:claude": "npm --prefix apps/claude run build",
     "build:codex": "npm --prefix apps/codex run build",
     "build:google": "npm --prefix apps/google run build",
     "build:grok": "npm --prefix apps/grok run build",
-    "build:all": "npm run build:claude && npm run build:codex && npm run build:google && npm run build:grok",
-    "build-release": "node scripts/build-release.js"
+    "build:all": "npm run build:claude && npm run build:codex && npm run build:google && npm run build:grok && npm run build:perch",
+    "build-release": "node scripts/build-release.js",
+    "install:perch": "npm --prefix apps/perch install",
+    "start:perch": "npm --prefix apps/perch run start",
+    "test:perch": "npm --prefix apps/perch test",
+    "build:perch": "npm --prefix apps/perch run build"
   }
 }

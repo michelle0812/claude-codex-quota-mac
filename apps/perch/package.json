@@ -1,0 +1,84 @@
+{
+  "name": "perch-quota-mac",
+  "version": "1.3.1",
+  "description": "macOS Perch 帳號用量圓球面板，顯示 Roost、Manual 滾動額度與本期 PT。",
+  "main": "src/main/main.js",
+  "author": "michelle0812",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/michelle0812/claude-codex-quota-mac.git"
+  },
+  "homepage": "https://github.com/michelle0812/claude-codex-quota-mac#readme",
+  "bugs": {
+    "url": "https://github.com/michelle0812/claude-codex-quota-mac/issues"
+  },
+  "keywords": [
+    "perch",
+    "perchai",
+    "usage-widget",
+    "electron",
+    "macos-widget"
+  ],
+  "scripts": {
+    "sync-shared": "node ../../scripts/sync-shared.js",
+    "heal-electron": "node ../../scripts/heal-electron.js apps/perch",
+    "postinstall": "npm run sync-shared && npm run heal-electron",
+    "prestart": "npm run sync-shared && npm run heal-electron",
+    "predev": "npm run sync-shared && npm run heal-electron",
+    "prebuild": "npm run sync-shared",
+    "prebuild:dir": "npm run sync-shared",
+    "pretest": "npm run sync-shared",
+    "dev": "electron .",
+    "start": "electron .",
+    "test:quota-store": "node scripts/verify-quota-store.js",
+    "test:widget-settings": "node scripts/verify-widget-settings.js",
+    "test:app-config": "node scripts/verify-app-config.js",
+    "test:preload": "node scripts/verify-preload.js",
+    "test:update-check": "node scripts/verify-update-check.js",
+    "test:mac-updater": "node ../../packages/build-scripts/verify-mac-updater.js",
+    "test": "npm run test:perch-service && npm run test:app-config && npm run test:preload && npm run test:widget-settings && npm run test:quota-store && npm run test:update-check",
+    "build": "npm run build:arm64 && npm run build:x64",
+    "build:dir": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --dir",
+    "build:arm64": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --arm64",
+    "build:x64": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --x64",
+    "prebuild:arm64": "npm run sync-shared",
+    "prebuild:x64": "npm run sync-shared",
+    "test:perch-service": "node scripts/verify-perch-service.js",
+    "test:ui": "node scripts/smoke-perch-ui.js"
+  },
+  "build": {
+    "appId": "app.perchai.quota.widget",
+    "productName": "Perch 額度",
+    "afterPack": "scripts/after-pack-macos.js",
+    "afterAllArtifactBuild": "scripts/after-all-artifact-build.js",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "assets/app-icon.png",
+      "assets/app-icon-tray-16.png",
+      "assets/app-icon-256.png",
+      "package.json"
+    ],
+    "mac": {
+      "icon": "assets/app-icon.png",
+      "target": [
+        "dmg"
+      ],
+      "artifactName": "PerchQuota-${version}-macOS-${arch}.${ext}",
+      "extendInfo": {
+        "LSUIElement": true
+      }
+    }
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "allowScripts": {
+    "electron@31.7.7": true
+  }
+}

@@ -92,8 +92,9 @@ async function tests() {
   const artifacts = load(path.join(root, 'scripts/build-release.js'), { 'node:fs': releaseFs });
   const releaseDeps = { run(cmd, args) { releaseCalls.push([cmd, [...args]]); }, verify(bundle, identity) { verified.push(bundle); assert.equal(identity, hash); } };
   artifacts.verifyReleaseArtifacts('1.2.8', hash, releaseDeps);
-  assert.equal(verified.length, 16); // 8 loose apps + 8 DMG apps
-  assert.equal(releaseCalls.filter(([cmd]) => cmd.endsWith('hdiutil')).length, 16);
+  assert.equal(verified.length, 20); // 10 loose apps + 10 DMG apps (including Perch)
+  assert.ok(verified.some(bundle => bundle.includes('Perch 額度.app')));
+  assert.equal(releaseCalls.filter(([cmd]) => cmd.endsWith('hdiutil')).length, 20);
   assert.ok(releaseCalls.find(([, args]) => Array.isArray(args) && args.includes('-readonly')));
   releaseCalls.length = 0;
   assert.throws(() => artifacts.verifyReleaseArtifacts('1.2.8', hash, { ...releaseDeps, verify(bundle) { if (bundle.startsWith('/tmp/')) throw Error('adhoc dmg'); } }), /adhoc dmg/);

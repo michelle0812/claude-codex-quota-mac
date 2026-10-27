@@ -41,7 +41,7 @@ const state = {
   lang: "zh",
   quota: null,
   snapshot: null,
-  selectedGroup: window.localStorage.getItem("googleQuotaSelectedGroup") || "gemini",
+  selectedGroup: window.localStorage.getItem(APP_CONFIG.quotaGroupStorageKey || "googleQuotaSelectedGroup") || "gemini",
   // 面板 ＋／－ 的狀態（哪一個面板、還能不能加/減），由 main 行程推過來。
   panel: null,
   error: null,
@@ -427,7 +427,8 @@ function clampPercentValue(value) {
 
 function formatWindow(window) {
   if (!window) return "--";
-  const resetText = window.resetsAt ? formatReset(window.resetsAt) : t("noReset");
+  const releaseAt = window.nextFreedAt || window.resetsAt;
+  const resetText = releaseAt ? formatReset(releaseAt) : t("noReset");
   return `${percentText(toUsedPercent(window.remainingPercent))} · ${resetText}`;
 }
 
@@ -452,8 +453,9 @@ function formatReset(value) {
 }
 
 function compactResetTime(window) {
-  if (!window?.resetsAt) return "--";
-  return formatCountdown(window.resetsAt);
+  const releaseAt = window?.nextFreedAt || window?.resetsAt;
+  if (!releaseAt) return "--";
+  return formatCountdown(releaseAt);
 }
 
 function compactResetDetail(window) {
@@ -518,12 +520,13 @@ function renderQuota(quota) {
     label.textContent = group?.name || "—";
     els.body.dataset.quotaGroups = "true";
     if (group) {
+      state.selectedGroup = group.id;
       const active = group.primary || group.secondary;
       quota = { ...quota, primary: group.primary, secondary: group.secondary,
         remainingPercent: active?.remainingPercent ?? null,
         usedPercent: active?.usedPercent ?? null, resetsAt: active?.resetsAt ?? null,
-        paceAdvice: group.paceAdvice || null };
-      els.liquidMeter.title = `${group.name} · 點擊切換模型群組`;
+        paceAdvice: group.paceAdvice || null, windowLabels: group.windowLabels || null };
+      els.liquidMeter.title = `${group.name}${group.detail ? ` · ${group.detail}` : ""} · ${APP_CONFIG.groupSwitchHint?.[state.lang] || "點擊切換模型群組"}`;
       els.liquidMeter.setAttribute("aria-label", els.liquidMeter.title);
     }
   }
@@ -1248,7 +1251,7 @@ if (APP_CONFIG.quotaGroupCycling) {
     if (!groups?.length) return;
     const index = groups.findIndex(group => group.id === state.selectedGroup);
     state.selectedGroup = groups[(index + 1) % groups.length].id;
-    window.localStorage.setItem("googleQuotaSelectedGroup", state.selectedGroup);
+    window.localStorage.setItem(APP_CONFIG.quotaGroupStorageKey || "googleQuotaSelectedGroup", state.selectedGroup);
     renderQuotaState(state.snapshot);
   };
   els.liquidMeter.addEventListener("click", cycleGroup);
